@@ -64,7 +64,7 @@ app.post("/api/rounds/prepare", async (req, res) => {
     requireConfigured();
 
     const wager = Number(req.body.wager);
-    const balls = Math.min(20, Math.max(1, Math.round(Number(req.body.balls) || 1)));
+    const balls = Math.min(100, Math.max(1, Math.round(Number(req.body.balls) || 1)));
     const totalWager = Math.round(wager * balls * 100) / 100;
 
     if (!Number.isFinite(wager) || wager < config.minWager || wager > config.maxWager) {

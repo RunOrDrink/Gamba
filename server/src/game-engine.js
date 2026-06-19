@@ -92,7 +92,7 @@ function createPreparedRound({ wallet, wager, balls = 1, totalWager = wager, ris
 
 function resolveRound(round, paymentSignature) {
   const config = riskConfigs[round.risk];
-  const balls = Math.min(20, Math.max(1, Number(round.balls) || 1));
+  const balls = Math.min(100, Math.max(1, Number(round.balls) || 1));
   const results = [];
   let payout = 0;
 
