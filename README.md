@@ -6,7 +6,7 @@ Static prototype plus the starting scaffold for wagering with a Solana SPL token
 
 - `index.html`, `styles.css`, `app.js`: playable browser prototype.
 - `config.js`: token, network, treasury, and API settings.
-- `server/`: settlement API scaffold for real token wagers.
+- `server/`: settlement API for real token wagers, payment verification, and treasury payouts.
 - `docs/PRODUCTION_CHECKLIST.md`: launch checklist for real-money/token play.
 
 ## Local demo
@@ -32,11 +32,11 @@ window.GAMBA_CONFIG = {
 };
 ```
 
-The live flow should be:
+The live flow is:
 
 1. Player connects a Solana wallet.
 2. Backend prepares a round and commits to a hidden server seed.
-3. Player sends the wager token transfer to the treasury or escrow.
+3. Backend returns a ready-to-sign SPL token transfer from player wallet to treasury.
 4. Backend verifies the SPL token transfer on-chain.
 5. Backend resolves each ball against the published payout table.
 6. Backend pays the player from treasury/escrow.
@@ -64,4 +64,4 @@ MAX_PAYOUT_POOL_RATIO=0.8
 
 `MIN_TREASURY_RESERVE` keeps a fixed amount of tokens untouched. `MAX_PAYOUT_POOL_RATIO` limits how much of the available pool any round may expose.
 
-Do not run mainnet token wagering without legal review, geofencing, KYC/AML decisions, responsible gambling controls, and a security review of the settlement wallet or on-chain escrow.
+For mainnet, keep the treasury funded above the largest allowed payout and protect the treasury keypair like production hot-wallet infrastructure.

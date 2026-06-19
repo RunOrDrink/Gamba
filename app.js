@@ -280,11 +280,13 @@
     return {
       width,
       height,
-      left: width * 0.035,
-      right: width * 0.965,
-      top: height * 0.08,
-      gateY: height * 0.16,
-      slotY: height * 0.9,
+      left: width * 0.025,
+      right: width * 0.975,
+      top: height * 0.06,
+      gateY: height * 0.15,
+      playTop: height * 0.24,
+      playBottom: height * 0.81,
+      slotY: height * 0.955,
       centerX: width * 0.5,
       ballRadius: clamp(minSide * 0.018, 7, 11),
       pegRadius: clamp(minSide * 0.011, 4.5, 7),
@@ -294,23 +296,18 @@
     };
   }
 
-  function slotWidth(metrics) {
-    return metrics.slotStep;
-  }
-
   function slotCenterX(index, metrics) {
     return metrics.slotLeft + metrics.slotStep * index;
   }
 
   function createPegs(width, height) {
     const metrics = boardMetrics(width, height);
-    const rows = [3, 4, 5, 6, 7, 8, 9, 10, 11];
+    const rows = [9, 10, 11, 12, 13, 14, 15, 14];
     const pegs = [];
 
     rows.forEach(function (count, rowIndex) {
-      const y = height * 0.24 + rowIndex * height * 0.065;
-      const maxSpan = width * 0.72;
-      const span = maxSpan * (count - 1) / (rows[rows.length - 1] - 1);
+      const y = lerp(metrics.playTop, metrics.playBottom, rowIndex / (rows.length - 1));
+      const span = width * (0.48 + rowIndex * 0.045);
       const start = metrics.centerX - span / 2;
       const gap = count > 1 ? span / (count - 1) : 0;
 
@@ -428,23 +425,32 @@
     const metrics = boardMetrics(width, height);
     const gateWidth = clamp(width * 0.052, 38, 54);
     const gateHeight = clamp(height * 0.07, 30, 42);
+    const bandX = width * 0.2;
+    const bandY = metrics.gateY - gateHeight * 0.95;
+    const bandWidth = width * 0.6;
+    const bandHeight = gateHeight * 1.9;
 
     ctx.save();
-    drawGate(width * 0.18, metrics.gateY, "L", gateWidth, gateHeight);
-    drawGate(metrics.centerX, metrics.gateY, "C", gateWidth, gateHeight);
-    drawGate(width * 0.82, metrics.gateY, "R", gateWidth, gateHeight);
+    drawRoundedRect(bandX, bandY, bandWidth, bandHeight, 8);
+    ctx.fillStyle = "rgba(244,239,227,0.035)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(244,239,227,0.1)";
+    ctx.stroke();
+    drawGate(width * 0.28, metrics.gateY, "L", gateWidth, gateHeight, state.selectedSides.indexOf("left") !== -1);
+    drawGate(metrics.centerX, metrics.gateY, "C", gateWidth, gateHeight, state.selectedSides.indexOf("center") !== -1);
+    drawGate(width * 0.72, metrics.gateY, "R", gateWidth, gateHeight, state.selectedSides.indexOf("right") !== -1);
     ctx.restore();
   }
 
-  function drawGate(x, y, label, width, height) {
+  function drawGate(x, y, label, width, height, active) {
     ctx.save();
     ctx.translate(x, y);
     drawRoundedRect(-width / 2, -height / 2, width, height, 8);
-    ctx.fillStyle = "rgba(244,239,227,0.07)";
+    ctx.fillStyle = active ? "rgba(71,199,143,0.18)" : "rgba(244,239,227,0.07)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(244,239,227,0.18)";
+    ctx.strokeStyle = active ? "rgba(71,199,143,0.6)" : "rgba(244,239,227,0.18)";
     ctx.stroke();
-    ctx.fillStyle = "#f4efe3";
+    ctx.fillStyle = active ? "#47c78f" : "#f4efe3";
     ctx.font = "800 13px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -505,6 +511,10 @@
     }
 
     balls.forEach(function (ball) {
+      if (ball.settled) {
+        return;
+      }
+
       if (!ball.active && !ball.settled) {
         drawQueuedBall(ball, width, height);
         return;
@@ -517,11 +527,10 @@
 
   function drawQueuedBall(ball, width, height) {
     const metrics = boardMetrics(width, height);
-    const direction = ball.side === "left" ? 1 : ball.side === "right" ? -1 : 0;
     const x = ball.side === "left"
-      ? width * 0.18
+      ? width * 0.28
       : ball.side === "right"
-        ? width * 0.82
+        ? width * 0.72
         : metrics.centerX;
     const y = metrics.gateY + ball.queueOffset;
 
@@ -576,7 +585,7 @@
     return sides[Math.floor(secureRandom() * sides.length)];
   }
 
-  function createBall(index, total, wager, side, now, targetTier) {
+  function createBall(index, total, wager, side, now, targetTier, resolved) {
     const width = state.view.width;
     const height = state.view.height;
     const metrics = boardMetrics(width, height);
@@ -584,14 +593,18 @@
     const queueOffset = (index - (total - 1) / 2) * metrics.ballRadius * 0.38;
     const verticalJitter = (secureRandom() - 0.5) * height * risk.spread;
     const speedJitter = (secureRandom() - 0.5) * width * risk.spread;
-    const targetPocket = targetPocketFromTier(side, targetTier);
-    const multiplier = stripSlots()[targetPocket];
+    const targetPocket = resolved && Number.isFinite(Number(resolved.pocket))
+      ? Number(resolved.pocket)
+      : targetPocketFromTier(side, targetTier);
+    const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
+      ? Number(resolved.multiplier)
+      : stripSlots()[targetPocket];
     const targetDirection = Math.sign(slotCenterX(targetPocket, metrics) - metrics.centerX) || (secureRandom() >= 0.5 ? 1 : -1);
     const spawnDelay = total > 10 ? 64 : 92;
     const launchX = side === "left"
-      ? width * 0.18
+      ? width * 0.28
       : side === "right"
-        ? width * 0.82
+        ? width * 0.72
         : metrics.centerX;
 
     return {
@@ -612,7 +625,9 @@
       settled: false,
       pocket: null,
       multiplier,
-      payout: roundMoney(wager * multiplier),
+      payout: resolved && Number.isFinite(Number(resolved.payout))
+        ? roundMoney(Number(resolved.payout))
+        : roundMoney(wager * multiplier),
       trail: []
     };
   }
@@ -677,17 +692,17 @@
     const sideBias = ball.side === "left" ? 1 : ball.side === "right" ? -1 : 0;
     const centerBias = (state.view.width * 0.5 - ball.x) * 0.12;
     const targetX = slotCenterX(ball.targetPocket, metrics);
-    const captureStart = metrics.slotY - Math.max(58, height * 0.16);
-    const targetY = metrics.slotY - ball.r * 0.25;
-    const targetPull = clamp((ball.y - height * 0.62) / (height * 0.2), 0, 1);
+    const captureStart = metrics.slotY - Math.max(82, height * 0.22);
+    const targetY = metrics.slotY - ball.r * 0.1;
+    const targetPull = clamp((ball.y - height * 0.52) / (height * 0.24), 0, 1);
     const capture = clamp((ball.y - captureStart) / Math.max(1, targetY - captureStart), 0, 1);
 
     ball.vx += (centerBias + sideBias * width * 0.012) * dt;
-    ball.vx += (targetX - ball.x) * (1.2 + capture * 14) * targetPull * dt;
-    ball.vy += (targetY - ball.y) * capture * 8 * dt;
+    ball.vx += (targetX - ball.x) * (1.2 + capture * 22) * targetPull * dt;
+    ball.vy += (targetY - ball.y) * capture * 12 * dt;
     ball.vy += gravity * dt;
-    ball.vx *= risk.drag * (1 - capture * 0.045);
-    ball.vy *= 0.999 * (1 - capture * 0.06);
+    ball.vx *= risk.drag * (1 - capture * 0.09);
+    ball.vy *= 0.999 * (1 - capture * 0.08);
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
   }
@@ -802,18 +817,9 @@
   function settleIfReady(ball) {
     const metrics = boardMetrics(state.view.width, state.view.height);
     const targetX = slotCenterX(ball.targetPocket, metrics);
-    const targetY = metrics.slotY - ball.r * 0.25;
-    const distanceToTarget = Math.abs(ball.x - targetX);
+    const targetY = metrics.slotY - ball.r * 0.1;
 
-    if (ball.y < targetY - 2 || ball.vy < -8) {
-      return;
-    }
-
-    if (distanceToTarget > ball.r * 0.55) {
-      ball.y = targetY;
-      ball.vy = 0;
-      ball.vx += (targetX - ball.x) * 0.18;
-      ball.vx *= 0.82;
+    if (ball.y < targetY || ball.vy < -8) {
       return;
     }
 
@@ -931,7 +937,14 @@
     }));
     const sideLabel = sideLabelForBalls(animation.balls);
 
-    state.balance = roundMoney(state.balance + totalPayout);
+    if (animation.live) {
+      if (Number.isFinite(state.liveBalance)) {
+        state.liveBalance = roundMoney(state.liveBalance - animation.totalWager + totalPayout);
+      }
+    } else {
+      state.balance = roundMoney(state.balance + totalPayout);
+    }
+
     state.profit = roundMoney(state.profit + net);
     state.history.unshift({
       balls: animation.balls.length,
@@ -943,9 +956,7 @@
       payout: totalPayout
     });
 
-    state.restingBalls = animation.balls.map(function (ball) {
-      return Object.assign({}, ball, { trail: [] });
-    });
+    state.restingBalls = [];
     state.animation = null;
     state.playing = false;
     playButton.disabled = false;
@@ -956,6 +967,93 @@
     renderStrip();
     renderHistory();
     drawBoard();
+  }
+
+  function base64ToBytes(value) {
+    const binary = window.atob(value);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return bytes;
+  }
+
+  async function signAndSendWagerTransaction(transactionBase64) {
+    if (!transactionBase64) {
+      throw new Error("Missing wager transaction");
+    }
+
+    if (!window.solanaWeb3 || !window.solanaWeb3.Transaction) {
+      throw new Error("Solana web3 bundle missing");
+    }
+
+    if (!state.wallet.provider || !state.wallet.provider.signAndSendTransaction) {
+      throw new Error("Wallet cannot send token transaction");
+    }
+
+    const transaction = window.solanaWeb3.Transaction.from(base64ToBytes(transactionBase64));
+    const sent = await state.wallet.provider.signAndSendTransaction(transaction);
+
+    if (typeof sent === "string") {
+      return sent;
+    }
+
+    if (sent && sent.signature) {
+      return sent.signature;
+    }
+
+    throw new Error("Wallet did not return payment signature");
+  }
+
+  function startVerifiedAnimation(result, payoutSignature) {
+    const results = Array.isArray(result.results) ? result.results : [];
+
+    if (!results.length) {
+      throw new Error("Settled round had no ball results");
+    }
+
+    const now = performance.now();
+    const totalWager = Number(result.totalWager || 0);
+    const ballWager = Number(result.wager || results[0].wager || 0);
+    const ballList = results.map(function (ballResult, index) {
+      return createBall(
+        index,
+        results.length,
+        Number(ballResult.wager || ballWager),
+        ballResult.side,
+        now,
+        Number(ballResult.tier),
+        ballResult
+      );
+    });
+
+    state.lastPockets = [];
+    state.restingBalls = [];
+    state.animation = {
+      balls: ballList,
+      risk: result.risk || state.risk,
+      requestedSides: state.selectedSides.slice(),
+      ballWager,
+      totalWager,
+      startedAt: now,
+      lastTime: null,
+      live: true,
+      paymentSignature: result.paymentSignature,
+      payoutSignature
+    };
+
+    lastResultEl.textContent = results.length > 1
+      ? "Verified " + results.length + " balls"
+      : "Verified " + ballResultLabel(results[0]);
+    updateDisplay();
+    renderStrip();
+    window.requestAnimationFrame(animate);
+  }
+
+  function ballResultLabel(ballResult) {
+    return multiplierLabel(Number(ballResult.multiplier || 0));
   }
 
   async function startLiveRound(wager, balls) {
@@ -974,6 +1072,7 @@
     state.playing = true;
     playButton.disabled = true;
     lastResultEl.textContent = "Preparing wager";
+    let animationStarted = false;
 
     try {
       const response = await fetch(config.apiBaseUrl.replace(/\/$/, "") + "/api/rounds/prepare", {
@@ -998,12 +1097,37 @@
         throw new Error(payload.error || "Wager prepare failed");
       }
 
-      lastResultEl.textContent = "Round " + shortAddress(payload.roundId);
+      lastResultEl.textContent = "Sign wager";
+      const paymentSignature = await signAndSendWagerTransaction(payload.wagerTransactionBase64);
+
+      lastResultEl.textContent = "Settling wager";
+      const settleResponse = await fetch(config.apiBaseUrl.replace(/\/$/, "") + "/api/rounds/settle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          roundId: payload.roundId,
+          paymentSignature
+        })
+      });
+      const settled = await settleResponse.json();
+
+      if (!settleResponse.ok) {
+        throw new Error(settled.error || "Wager settle failed");
+      }
+
+      lastResultEl.textContent = "Paid " + amountLabel(Number(settled.payout || 0));
+      startVerifiedAnimation(settled.result, settled.payoutSignature);
+      animationStarted = true;
     } catch (error) {
       lastResultEl.textContent = error.message || "Token wager failed";
     } finally {
-      state.playing = false;
-      playButton.disabled = false;
+      if (!animationStarted) {
+        state.playing = false;
+        playButton.disabled = false;
+        updateDisplay();
+      }
     }
   }
 

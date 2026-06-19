@@ -26,14 +26,13 @@
 - Reveal the server seed after settlement so users can verify the result.
 - For stronger fairness, use a verifiable randomness provider or audited on-chain program.
 
-## Compliance
+## Launch Ops
 
-- Real token wagering can be regulated gambling even if the currency is a memecoin.
-- Decide blocked jurisdictions before launch.
-- Add age checks, geofencing, responsible gambling limits, self-exclusion, and support flows.
-- Review KYC/AML obligations.
-- Publish terms, privacy policy, risk disclosures, and house edge.
-- Get legal advice before accepting wagers from real users.
+- Publish the house edge and payout table in the app.
+- Add clear deposit, wager, payout, and failed-transaction states.
+- Add support flow for stuck or expired wager transactions.
+- Keep a manual pause switch for the API.
+- Keep enough treasury liquidity to cover the largest allowed payout.
 
 ## Security
 

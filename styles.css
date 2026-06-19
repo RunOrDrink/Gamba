@@ -304,9 +304,9 @@ input:focus {
 
 .arena {
   display: grid;
-  align-content: start;
+  align-content: stretch;
   justify-items: center;
-  grid-template-rows: max-content max-content max-content;
+  grid-template-rows: max-content minmax(0, 1fr) max-content;
   gap: 8px;
   min-width: 0;
   padding: 10px;
@@ -341,9 +341,9 @@ input:focus {
 
 .board-wrap {
   position: relative;
-  align-self: start;
+  align-self: stretch;
   width: min(100%, 1060px);
-  height: clamp(430px, 62vh, 640px);
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(244, 239, 227, 0.1);
@@ -360,7 +360,7 @@ canvas {
 
 .multiplier-strip {
   display: grid;
-  align-self: start;
+  align-self: end;
   grid-template-columns: repeat(15, minmax(0, 1fr));
   gap: 0;
   width: min(100%, 1060px);

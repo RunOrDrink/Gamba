@@ -1,9 +1,11 @@
 const {
+  createAssociatedTokenAccountIdempotentInstruction,
+  createTransferInstruction,
   getAssociatedTokenAddressSync,
   getOrCreateAssociatedTokenAccount,
   transfer
 } = require("@solana/spl-token");
-const { PublicKey } = require("@solana/web3.js");
+const { PublicKey, Transaction } = require("@solana/web3.js");
 
 function decimalToRaw(amount, decimals) {
   const [wholePart, decimalPart = ""] = String(amount).split(".");
@@ -38,6 +40,18 @@ async function verifyTokenPayment(connection, params) {
   const mint = new PublicKey(params.mint);
   const treasury = new PublicKey(params.treasury);
   const rawAmount = params.rawAmount;
+
+  if (params.blockhash && params.lastValidBlockHeight) {
+    const confirmation = await connection.confirmTransaction({
+      signature,
+      blockhash: params.blockhash,
+      lastValidBlockHeight: params.lastValidBlockHeight
+    }, "confirmed");
+
+    if (confirmation.value.err) {
+      throw new Error("Payment transaction failed");
+    }
+  }
 
   const tx = await connection.getParsedTransaction(signature, {
     commitment: "confirmed",
@@ -83,6 +97,43 @@ async function getTreasuryTokenBalanceRaw(connection, params) {
   }
 }
 
+async function buildWagerTransferTransaction(connection, params) {
+  const player = new PublicKey(params.player);
+  const mint = new PublicKey(params.mint);
+  const treasury = new PublicKey(params.treasury);
+  const rawAmount = params.rawAmount;
+  const playerTokenAccount = getAssociatedTokenAddressSync(mint, player);
+  const treasuryTokenAccount = getAssociatedTokenAddressSync(mint, treasury);
+  const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+  const transaction = new Transaction({
+    feePayer: player,
+    recentBlockhash: latestBlockhash.blockhash
+  });
+
+  transaction.add(
+    createAssociatedTokenAccountIdempotentInstruction(
+      player,
+      treasuryTokenAccount,
+      treasury,
+      mint
+    ),
+    createTransferInstruction(
+      playerTokenAccount,
+      treasuryTokenAccount,
+      player,
+      rawAmount
+    )
+  );
+
+  return {
+    transactionBase64: transaction
+      .serialize({ requireAllSignatures: false, verifySignatures: false })
+      .toString("base64"),
+    blockhash: latestBlockhash.blockhash,
+    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+  };
+}
+
 async function sendTokenPayout(connection, params) {
   const rawAmount = params.rawAmount;
 
@@ -112,6 +163,7 @@ async function sendTokenPayout(connection, params) {
 }
 
 module.exports = {
+  buildWagerTransferTransaction,
   decimalToRaw,
   rawToDecimal,
   getTreasuryTokenBalanceRaw,

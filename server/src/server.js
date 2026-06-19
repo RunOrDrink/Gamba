@@ -4,6 +4,7 @@ const { Connection, PublicKey } = require("@solana/web3.js");
 const config = require("./config");
 const { createPreparedRound, resolveRound, riskConfigs } = require("./game-engine");
 const {
+  buildWagerTransferTransaction,
   decimalToRaw,
   getTreasuryTokenBalanceRaw,
   rawToDecimal,
@@ -108,6 +109,13 @@ app.post("/api/rounds/prepare", async (req, res) => {
       return;
     }
 
+    const wagerTransfer = await buildWagerTransferTransaction(connection, {
+      player: player.toBase58(),
+      mint: config.tokenMint.toBase58(),
+      treasury: config.treasuryWallet.toBase58(),
+      rawAmount: rawWager
+    });
+
     const round = createPreparedRound({
       wallet: player.toBase58(),
       wager,
@@ -117,6 +125,8 @@ app.post("/api/rounds/prepare", async (req, res) => {
       sides: req.body.sides || req.body.side,
       tokenMint: config.tokenMint.toBase58()
     });
+    round.paymentBlockhash = wagerTransfer.blockhash;
+    round.paymentLastValidBlockHeight = wagerTransfer.lastValidBlockHeight;
 
     rounds.set(round.roundId, round);
 
@@ -133,7 +143,10 @@ app.post("/api/rounds/prepare", async (req, res) => {
       maxPayout,
       rawMaxPayout: rawMaxPayout.toString(),
       rawTreasuryPool: treasuryRaw.toString(),
-      rawAllowedPayout: allowedPayout.toString()
+      rawAllowedPayout: allowedPayout.toString(),
+      wagerTransactionBase64: wagerTransfer.transactionBase64,
+      wagerBlockhash: wagerTransfer.blockhash,
+      lastValidBlockHeight: wagerTransfer.lastValidBlockHeight
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -161,7 +174,9 @@ app.post("/api/rounds/settle", async (req, res) => {
       player: round.wallet,
       mint: config.tokenMint.toBase58(),
       treasury: config.treasuryWallet.toBase58(),
-      rawAmount: rawWager
+      rawAmount: rawWager,
+      blockhash: round.paymentBlockhash,
+      lastValidBlockHeight: round.paymentLastValidBlockHeight
     });
 
     const result = resolveRound(round, req.body.paymentSignature);
