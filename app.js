@@ -2,6 +2,29 @@
   "use strict";
 
   const STARTING_BALANCE = 1000;
+  const defaultConfig = {
+    appName: "Gamba Side Rush",
+    network: "devnet",
+    apiBaseUrl: "",
+    liveTokenWagering: false,
+    token: {
+      name: "Gamba",
+      symbol: "GAMBA",
+      mintAddress: "",
+      decimals: 6,
+      treasuryAddress: ""
+    }
+  };
+  const config = Object.assign({}, defaultConfig, window.GAMBA_CONFIG || {});
+  config.token = Object.assign({}, defaultConfig.token, (window.GAMBA_CONFIG || {}).token || {});
+
+  const TOKEN_SYMBOL = config.token.symbol || "GAMBA";
+  const liveReady = Boolean(
+    config.liveTokenWagering &&
+    config.apiBaseUrl &&
+    config.token.mintAddress &&
+    config.token.treasuryAddress
+  );
 
   const riskConfigs = {
     low: {
@@ -20,13 +43,20 @@
 
   const state = {
     balance: STARTING_BALANCE,
+    liveBalance: null,
     profit: 0,
     risk: "medium",
     side: "random",
+    mode: "demo",
     playing: false,
     lastPocket: null,
     history: [],
     animation: null,
+    wallet: {
+      provider: null,
+      publicKey: "",
+      connected: false
+    },
     view: {
       width: 0,
       height: 0
@@ -36,21 +66,42 @@
   const canvas = document.getElementById("board");
   const ctx = canvas.getContext("2d");
   const balanceEl = document.getElementById("balance");
+  const balanceLabelEl = document.getElementById("balanceLabel");
   const profitEl = document.getElementById("profit");
   const wagerInput = document.getElementById("wager");
+  const wagerUnitEl = document.getElementById("wagerUnit");
   const playButton = document.getElementById("playButton");
   const resetButton = document.getElementById("resetButton");
   const halfButton = document.getElementById("halfButton");
   const maxButton = document.getElementById("maxButton");
+  const connectWalletButton = document.getElementById("connectWalletButton");
   const lastResultEl = document.getElementById("lastResult");
+  const tokenTickerEl = document.getElementById("tokenTicker");
+  const walletStatusEl = document.getElementById("walletStatus");
+  const networkStatusEl = document.getElementById("networkStatus");
+  const mintStatusEl = document.getElementById("mintStatus");
+  const treasuryStatusEl = document.getElementById("treasuryStatus");
   const multiplierStrip = document.getElementById("multiplierStrip");
   const historyList = document.getElementById("historyList");
   const roundCount = document.getElementById("roundCount");
   const sideButtons = Array.from(document.querySelectorAll("[data-side]"));
   const riskButtons = Array.from(document.querySelectorAll("[data-risk]"));
+  const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
 
   function money(value) {
     return Number(value).toFixed(2);
+  }
+
+  function amountLabel(value) {
+    return money(value) + " " + TOKEN_SYMBOL;
+  }
+
+  function shortAddress(address) {
+    if (!address) {
+      return "Unset";
+    }
+
+    return address.length > 12 ? address.slice(0, 4) + "..." + address.slice(-4) : address;
   }
 
   function multiplierLabel(value) {
@@ -78,6 +129,66 @@
     return Math.floor(value * 100) / 100;
   }
 
+  function configuredBalance() {
+    return state.mode === "demo" ? state.balance : state.liveBalance || 0;
+  }
+
+  function findSolanaWallet() {
+    if (window.solana && window.solana.isPhantom) {
+      return window.solana;
+    }
+
+    if (window.phantom && window.phantom.solana) {
+      return window.phantom.solana;
+    }
+
+    return null;
+  }
+
+  async function connectWallet() {
+    const provider = findSolanaWallet();
+
+    if (!provider) {
+      walletStatusEl.textContent = "Install wallet";
+      lastResultEl.textContent = "No Solana wallet";
+      return;
+    }
+
+    try {
+      const response = await provider.connect();
+      state.wallet.provider = provider;
+      state.wallet.publicKey = response.publicKey ? response.publicKey.toString() : "";
+      state.wallet.connected = Boolean(state.wallet.publicKey);
+      walletStatusEl.textContent = shortAddress(state.wallet.publicKey);
+      connectWalletButton.querySelector("span").textContent = "Wallet connected";
+      if (state.mode === "live") {
+        lastResultEl.textContent = liveReady ? "Token mode ready" : "Token config needed";
+      }
+    } catch (error) {
+      walletStatusEl.textContent = "Rejected";
+      lastResultEl.textContent = "Wallet rejected";
+    }
+  }
+
+  function setMode(mode) {
+    if (state.playing) {
+      return;
+    }
+
+    state.mode = mode;
+    modeButtons.forEach(function (button) {
+      button.classList.toggle("is-active", button.dataset.mode === mode);
+    });
+
+    if (mode === "live") {
+      lastResultEl.textContent = liveReady ? "Token mode ready" : "Token config needed";
+    } else {
+      lastResultEl.textContent = "Ready";
+    }
+
+    updateDisplay();
+  }
+
   function activeMultipliers() {
     return riskConfigs[state.risk].multipliers;
   }
@@ -103,10 +214,11 @@
   }
 
   function updateDisplay() {
-    balanceEl.textContent = money(state.balance);
-    profitEl.textContent = money(state.profit);
+    balanceLabelEl.textContent = state.mode === "demo" ? "Demo balance" : "Wallet balance";
+    balanceEl.textContent = amountLabel(configuredBalance());
+    profitEl.textContent = amountLabel(state.profit);
     roundCount.textContent = String(state.history.length);
-    wagerInput.max = String(Math.max(1, Math.floor(state.balance)));
+    wagerInput.max = String(Math.max(1, Math.floor(configuredBalance() || state.balance)));
   }
 
   function renderStrip() {
@@ -145,11 +257,11 @@
 
       const wager = document.createElement("span");
       wager.className = "history-side";
-      wager.textContent = "Wager " + money(round.wager);
+      wager.textContent = "Wager " + amountLabel(round.wager);
 
       const payout = document.createElement("span");
       payout.className = "history-pay";
-      payout.textContent = money(round.payout);
+      payout.textContent = amountLabel(round.payout);
 
       item.append(main, payout, side, wager);
       historyList.appendChild(item);
@@ -481,6 +593,11 @@
       return;
     }
 
+    if (state.mode === "live") {
+      startLiveRound(wager);
+      return;
+    }
+
     if (wager > state.balance) {
       wagerInput.value = money(state.balance);
       return;
@@ -540,11 +657,58 @@
     state.animation = null;
     state.playing = false;
     playButton.disabled = false;
-    lastResultEl.textContent = multiplierLabel(anim.multiplier) + " / " + money(anim.payout);
+    lastResultEl.textContent = multiplierLabel(anim.multiplier) + " / " + amountLabel(anim.payout);
     updateDisplay();
     renderStrip();
     renderHistory();
     drawBoard();
+  }
+
+  async function startLiveRound(wager) {
+    if (!state.wallet.connected) {
+      await connectWallet();
+      if (!state.wallet.connected) {
+        return;
+      }
+    }
+
+    if (!liveReady) {
+      lastResultEl.textContent = "Token config needed";
+      return;
+    }
+
+    state.playing = true;
+    playButton.disabled = true;
+    lastResultEl.textContent = "Preparing wager";
+
+    try {
+      const response = await fetch(config.apiBaseUrl.replace(/\/$/, "") + "/api/rounds/prepare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          wallet: state.wallet.publicKey,
+          wager: wager,
+          risk: state.risk,
+          side: state.side,
+          tokenMint: config.token.mintAddress
+        })
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Wager prepare failed");
+      }
+
+      lastResultEl.textContent = "Round " + shortAddress(payload.roundId);
+    } catch (error) {
+      lastResultEl.textContent = error.message || "Token wager failed";
+    } finally {
+      state.playing = false;
+      playButton.disabled = false;
+    }
   }
 
   function resizeCanvas() {
@@ -595,11 +759,13 @@
   playButton.addEventListener("click", startRound);
 
   halfButton.addEventListener("click", function () {
-    wagerInput.value = money(Math.max(1, state.balance / 2));
+    const balance = configuredBalance() || state.balance;
+    wagerInput.value = money(Math.max(1, balance / 2));
   });
 
   maxButton.addEventListener("click", function () {
-    wagerInput.value = money(Math.max(1, state.balance));
+    const balance = configuredBalance() || state.balance;
+    wagerInput.value = money(Math.max(1, balance));
   });
 
   resetButton.addEventListener("click", function () {
@@ -619,8 +785,16 @@
   });
 
   wagerInput.addEventListener("blur", function () {
-    const fixed = clamp(selectedWager(), 1, Math.max(1, state.balance));
+    const fixed = clamp(selectedWager(), 1, Math.max(1, configuredBalance() || state.balance));
     wagerInput.value = money(fixed);
+  });
+
+  connectWalletButton.addEventListener("click", connectWallet);
+
+  modeButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      setMode(button.dataset.mode);
+    });
   });
 
   if ("ResizeObserver" in window) {
@@ -630,6 +804,12 @@
     window.addEventListener("resize", resizeCanvas);
   }
 
+  tokenTickerEl.textContent = TOKEN_SYMBOL;
+  wagerUnitEl.textContent = TOKEN_SYMBOL;
+  networkStatusEl.textContent = config.network || "devnet";
+  mintStatusEl.textContent = shortAddress(config.token.mintAddress);
+  treasuryStatusEl.textContent = shortAddress(config.token.treasuryAddress);
+  walletStatusEl.textContent = findSolanaWallet() ? "Ready" : "Not found";
   updateDisplay();
   renderStrip();
   renderHistory();

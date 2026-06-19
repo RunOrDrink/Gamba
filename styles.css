@@ -20,11 +20,12 @@
 
 html,
 body {
-  min-height: 100%;
+  height: 100%;
 }
 
 body {
   margin: 0;
+  overflow: hidden;
   background:
     radial-gradient(circle at 20% 10%, rgba(71, 199, 143, 0.16), transparent 30%),
     radial-gradient(circle at 90% 20%, rgba(227, 180, 72, 0.14), transparent 28%),
@@ -44,10 +45,11 @@ button {
 
 .game-shell {
   display: grid;
-  grid-template-columns: 280px minmax(420px, 1fr) 260px;
-  gap: 16px;
-  min-height: 100vh;
-  padding: 16px;
+  grid-template-columns: 250px minmax(460px, 1fr) 240px;
+  gap: 10px;
+  height: 100vh;
+  min-height: 0;
+  padding: 10px;
 }
 
 .control-panel,
@@ -57,32 +59,34 @@ button {
   border-radius: 8px;
   background: rgba(25, 30, 26, 0.9);
   box-shadow: 0 20px 50px var(--shadow);
+  min-height: 0;
 }
 
 .control-panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 18px;
+  gap: 10px;
+  overflow: auto;
+  padding: 12px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 52px;
+  gap: 10px;
+  min-height: 44px;
 }
 
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   border: 1px solid rgba(227, 180, 72, 0.45);
   border-radius: 8px;
   background: linear-gradient(145deg, rgba(227, 180, 72, 0.22), rgba(71, 199, 143, 0.16));
   color: var(--gold);
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 900;
 }
 
@@ -93,14 +97,48 @@ button {
 }
 
 .brand h1 {
-  font-size: 1.45rem;
+  font-size: 1.25rem;
   line-height: 1;
 }
 
 .brand p {
   color: var(--muted);
-  font-size: 0.9rem;
-  margin-top: 4px;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+.wallet-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(244, 239, 227, 0.1);
+  border-radius: 8px;
+  background: rgba(16, 20, 16, 0.74);
+  padding: 9px;
+}
+
+.wallet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wallet-row span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.wallet-row strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.82rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metric {
@@ -108,7 +146,7 @@ button {
   align-items: end;
   justify-content: space-between;
   gap: 12px;
-  padding-block: 12px;
+  padding-block: 8px;
   border-block: 1px solid rgba(244, 239, 227, 0.1);
 }
 
@@ -125,12 +163,14 @@ label,
 
 .metric strong {
   color: var(--green);
-  font-size: 1.4rem;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .wager-row {
@@ -142,7 +182,7 @@ label,
 input {
   width: 100%;
   min-width: 0;
-  height: 42px;
+  height: 36px;
   border: 1px solid rgba(244, 239, 227, 0.12);
   border-radius: 8px;
   background: #101410;
@@ -156,9 +196,16 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(71, 199, 143, 0.14);
 }
 
+.range-input {
+  height: 26px;
+  padding: 0;
+  accent-color: var(--green);
+}
+
 .small-button,
 .segmented button,
-.reset-button {
+.reset-button,
+.connect-button {
   border: 1px solid rgba(244, 239, 227, 0.12);
   border-radius: 8px;
   background: rgba(244, 239, 227, 0.06);
@@ -166,7 +213,7 @@ input:focus {
 }
 
 .small-button {
-  height: 42px;
+  height: 36px;
   color: var(--muted);
   font-size: 0.85rem;
   font-weight: 800;
@@ -178,9 +225,13 @@ input:focus {
   gap: 6px;
 }
 
+.mode-toggle {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .segmented button {
   min-width: 0;
-  height: 40px;
+  height: 36px;
   padding: 0 8px;
   color: var(--muted);
   font-size: 0.86rem;
@@ -189,7 +240,8 @@ input:focus {
 
 .small-button:hover,
 .segmented button:hover,
-.reset-button:hover {
+.reset-button:hover,
+.connect-button:hover {
   border-color: rgba(71, 199, 143, 0.42);
   color: var(--text);
 }
@@ -201,12 +253,13 @@ input:focus {
 }
 
 .play-button,
-.reset-button {
+.reset-button,
+.connect-button {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 48px;
+  min-height: 40px;
 }
 
 .play-button {
@@ -226,15 +279,23 @@ input:focus {
 }
 
 .play-button svg,
-.reset-button svg {
-  width: 20px;
-  height: 20px;
+.reset-button svg,
+.connect-button svg {
+  width: 18px;
+  height: 18px;
   flex: 0 0 auto;
   fill: currentColor;
 }
 
+.connect-button {
+  min-height: 36px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
 .reset-button {
-  min-height: 42px;
+  min-height: 36px;
   color: var(--muted);
   background: transparent;
 }
@@ -250,15 +311,15 @@ input:focus {
 .arena {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  padding: 14px;
+  padding: 10px;
 }
 
 .arena-bar {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .round-readout {
@@ -266,11 +327,11 @@ input:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 46px;
+  min-height: 38px;
   border: 1px solid rgba(244, 239, 227, 0.1);
   border-radius: 8px;
   background: rgba(16, 20, 16, 0.74);
-  padding: 0 14px;
+  padding: 0 10px;
 }
 
 .round-readout strong {
@@ -280,7 +341,7 @@ input:focus {
 
 .board-wrap {
   position: relative;
-  min-height: 340px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(244, 239, 227, 0.1);
   border-radius: 8px;
@@ -291,25 +352,25 @@ canvas {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 340px;
+  min-height: 0;
 }
 
 .multiplier-strip {
   display: grid;
   grid-template-columns: repeat(15, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
 .pocket {
   display: grid;
   place-items: center;
   min-width: 0;
-  min-height: 44px;
+  min-height: 34px;
   border: 1px solid rgba(244, 239, 227, 0.11);
   border-radius: 8px;
   background: rgba(244, 239, 227, 0.055);
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 900;
   transition: transform 160ms ease, border-color 160ms ease, color 160ms ease, background 160ms ease;
 }
@@ -330,7 +391,7 @@ canvas {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 16px;
+  padding: 12px;
 }
 
 .history-head {
@@ -338,7 +399,7 @@ canvas {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 12px;
+  padding-bottom: 9px;
   border-bottom: 1px solid rgba(244, 239, 227, 0.1);
 }
 
@@ -359,8 +420,8 @@ canvas {
 
 .history-list {
   display: grid;
-  gap: 8px;
-  margin: 12px 0 0;
+  gap: 7px;
+  margin: 9px 0 0;
   padding: 0;
   list-style: none;
   overflow: auto;
@@ -374,7 +435,7 @@ canvas {
   border: 1px solid rgba(244, 239, 227, 0.09);
   border-radius: 8px;
   background: rgba(244, 239, 227, 0.045);
-  padding: 10px;
+  padding: 8px;
 }
 
 .history-main {
@@ -402,8 +463,14 @@ canvas {
 }
 
 @media (max-width: 1080px) {
+  body {
+    overflow: auto;
+  }
+
   .game-shell {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
   }
 
   .control-panel {
@@ -413,6 +480,7 @@ canvas {
   }
 
   .brand,
+  .wallet-card,
   .metric,
   .play-button,
   .reset-button {
@@ -426,6 +494,11 @@ canvas {
   .history-list {
     max-height: 260px;
   }
+
+  .board-wrap,
+  canvas {
+    min-height: 360px;
+  }
 }
 
 @media (max-width: 680px) {
@@ -438,6 +511,7 @@ canvas {
   }
 
   .brand,
+  .wallet-card,
   .metric,
   .play-button,
   .reset-button {
