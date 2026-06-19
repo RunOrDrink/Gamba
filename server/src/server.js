@@ -47,8 +47,16 @@ app.post("/api/rounds/prepare", (req, res) => {
     requireConfigured();
 
     const wager = Number(req.body.wager);
+    const balls = Math.min(10, Math.max(1, Math.round(Number(req.body.balls) || 1)));
+    const totalWager = Math.round(wager * balls * 100) / 100;
+
     if (!Number.isFinite(wager) || wager < config.minWager || wager > config.maxWager) {
       res.status(400).json({ error: "Invalid wager" });
+      return;
+    }
+
+    if (!Number.isFinite(totalWager) || totalWager < config.minWager || totalWager > config.maxWager) {
+      res.status(400).json({ error: "Invalid total wager" });
       return;
     }
 
@@ -63,6 +71,8 @@ app.post("/api/rounds/prepare", (req, res) => {
     const round = createPreparedRound({
       wallet: player.toBase58(),
       wager,
+      balls,
+      totalWager,
       risk: req.body.risk,
       side: req.body.side,
       tokenMint: config.tokenMint.toBase58()
@@ -77,7 +87,9 @@ app.post("/api/rounds/prepare", (req, res) => {
       tokenMint: config.tokenMint.toBase58(),
       treasuryWallet: config.treasuryWallet.toBase58(),
       wager,
-      rawWager: decimalToRaw(wager, config.tokenDecimals).toString()
+      balls,
+      totalWager,
+      rawWager: decimalToRaw(totalWager, config.tokenDecimals).toString()
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -99,7 +111,7 @@ app.post("/api/rounds/settle", async (req, res) => {
       return;
     }
 
-    const rawWager = decimalToRaw(round.wager, config.tokenDecimals);
+    const rawWager = decimalToRaw(round.totalWager, config.tokenDecimals);
     await verifyTokenPayment(connection, {
       signature: req.body.paymentSignature,
       player: round.wallet,

@@ -196,12 +196,6 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(71, 199, 143, 0.14);
 }
 
-.range-input {
-  height: 26px;
-  padding: 0;
-  accent-color: var(--green);
-}
-
 .small-button,
 .segmented button,
 .reset-button,

@@ -58,7 +58,11 @@
 
         <div class="field">
           <label for="ballCount">Balls <span id="ballCountValue">1</span></label>
-          <input id="ballCount" class="range-input" type="range" min="1" max="10" step="1" value="1">
+          <div class="wager-row">
+            <button class="small-button" type="button" id="ballsMinusButton">-</button>
+            <input id="ballCount" type="number" inputmode="numeric" min="1" max="10" step="1" value="1">
+            <button class="small-button" type="button" id="ballsPlusButton">+</button>
+          </div>
         </div>
 
         <div class="field">

@@ -2,6 +2,9 @@
   "use strict";
 
   const STARTING_BALANCE = 1000;
+  const MAX_BALLS = 10;
+  const TARGET_RTP = 0.925;
+
   const defaultConfig = {
     appName: "Gamba Side Rush",
     network: "devnet",
@@ -15,6 +18,7 @@
       treasuryAddress: ""
     }
   };
+
   const config = Object.assign({}, defaultConfig, window.GAMBA_CONFIG || {});
   config.token = Object.assign({}, defaultConfig.token, (window.GAMBA_CONFIG || {}).token || {});
 
@@ -29,16 +33,22 @@
   const riskConfigs = {
     low: {
       multipliers: [0.5, 0.8, 0.95, 1.05, 1.2, 1.5, 2, 4],
-      weights: [0.08, 0.16, 0.22, 0.22, 0.16, 0.1, 0.045, 0.015]
+      weights: [0.2098571429, 0.25, 0.22, 0.15, 0.09, 0.05, 0.025, 0.0051428571]
     },
     medium: {
       multipliers: [0, 0.2, 0.5, 0.9, 1.4, 2.5, 5, 15],
-      weights: [0.22, 0.21, 0.18, 0.15, 0.11, 0.07, 0.045, 0.015]
+      weights: [0.1019333333, 0.25, 0.22, 0.18, 0.13, 0.08, 0.035, 0.0030666667]
     },
     high: {
       multipliers: [0, 0.1, 0.25, 0.6, 1.5, 5, 18, 75],
-      weights: [0.32, 0.24, 0.18, 0.12, 0.08, 0.04, 0.015, 0.005]
+      weights: [0.3032933333, 0.25, 0.2, 0.14, 0.07, 0.025, 0.006, 0.0057066667]
     }
+  };
+
+  const physicsByRisk = {
+    low: { spread: 0.05, restitution: 0.52, drag: 0.994 },
+    medium: { spread: 0.08, restitution: 0.62, drag: 0.996 },
+    high: { spread: 0.12, restitution: 0.72, drag: 0.998 }
   };
 
   const state = {
@@ -48,10 +58,12 @@
     risk: "medium",
     side: "random",
     mode: "demo",
+    ballCount: 1,
     playing: false,
-    lastPocket: null,
+    lastPockets: [],
     history: [],
     animation: null,
+    restingBalls: [],
     wallet: {
       provider: null,
       publicKey: "",
@@ -70,6 +82,10 @@
   const profitEl = document.getElementById("profit");
   const wagerInput = document.getElementById("wager");
   const wagerUnitEl = document.getElementById("wagerUnit");
+  const ballCountInput = document.getElementById("ballCount");
+  const ballCountValueEl = document.getElementById("ballCountValue");
+  const ballsMinusButton = document.getElementById("ballsMinusButton");
+  const ballsPlusButton = document.getElementById("ballsPlusButton");
   const playButton = document.getElementById("playButton");
   const resetButton = document.getElementById("resetButton");
   const halfButton = document.getElementById("halfButton");
@@ -92,6 +108,10 @@
     return Number(value).toFixed(2);
   }
 
+  function roundMoney(value) {
+    return Math.round(value * 100) / 100;
+  }
+
   function amountLabel(value) {
     return money(value) + " " + TOKEN_SYMBOL;
   }
@@ -112,12 +132,18 @@
     return Math.min(max, Math.max(min, value));
   }
 
-  function lerp(a, b, t) {
-    return a + (b - a) * t;
+  function secureRandom() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      const values = new Uint32Array(1);
+      window.crypto.getRandomValues(values);
+      return values[0] / 4294967296;
+    }
+
+    return Math.random();
   }
 
-  function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
   }
 
   function selectedWager() {
@@ -127,6 +153,15 @@
     }
 
     return Math.floor(value * 100) / 100;
+  }
+
+  function selectedBallCount() {
+    const value = Number(ballCountInput.value);
+    if (!Number.isFinite(value)) {
+      return 1;
+    }
+
+    return clamp(Math.round(value), 1, MAX_BALLS);
   }
 
   function configuredBalance() {
@@ -180,12 +215,9 @@
       button.classList.toggle("is-active", button.dataset.mode === mode);
     });
 
-    if (mode === "live") {
-      lastResultEl.textContent = liveReady ? "Token mode ready" : "Token config needed";
-    } else {
-      lastResultEl.textContent = "Ready";
-    }
-
+    lastResultEl.textContent = mode === "live"
+      ? liveReady ? "Token mode ready" : "Token config needed"
+      : "Ready";
     updateDisplay();
   }
 
@@ -193,36 +225,118 @@
     return riskConfigs[state.risk].multipliers;
   }
 
+  function activeWeights() {
+    return riskConfigs[state.risk].weights;
+  }
+
   function stripSlots() {
     const multipliers = activeMultipliers();
     return multipliers.concat(multipliers.slice(0, -1).reverse());
   }
 
-  function pocketIndex(side, tier) {
+  function weightedTier(weights) {
+    const total = weights.reduce(function (sum, weight) {
+      return sum + weight;
+    }, 0);
+    let roll = secureRandom() * total;
+
+    for (let index = 0; index < weights.length; index += 1) {
+      roll -= weights[index];
+      if (roll <= 0) {
+        return index;
+      }
+    }
+
+    return weights.length - 1;
+  }
+
+  function expectedRtpForRisk(risk) {
+    const riskConfig = riskConfigs[risk];
+    return riskConfig.weights.reduce(function (sum, weight, index) {
+      return sum + weight * riskConfig.multipliers[index];
+    }, 0);
+  }
+
+  function targetPocketFromTier(side, tier) {
     return side === "left" ? tier : 14 - tier;
   }
 
-  function targetX(side, tier) {
-    const width = state.view.width;
-    const outer = width * 0.075;
-    const center = width * 0.5;
-    const distance = center - outer;
-    const progress = tier / 7;
-    return side === "left"
-      ? outer + distance * progress
-      : width - outer - distance * progress;
+  function boardMetrics(width, height) {
+    const minSide = Math.min(width, height);
+    const left = width * 0.055;
+    const right = width * 0.945;
+    return {
+      width,
+      height,
+      left,
+      right,
+      top: height * 0.09,
+      gateY: height * 0.47,
+      slotY: height * 0.9,
+      centerX: width * 0.5,
+      ballRadius: clamp(minSide * 0.021, 7, 12),
+      pegRadius: clamp(minSide * 0.012, 4, 7),
+      pocketCount: 15
+    };
+  }
+
+  function slotWidth(metrics) {
+    return (metrics.right - metrics.left) / metrics.pocketCount;
+  }
+
+  function slotCenterX(index, metrics) {
+    return metrics.left + slotWidth(metrics) * (index + 0.5);
+  }
+
+  function createPegs(width, height) {
+    const metrics = boardMetrics(width, height);
+    const rows = [
+      { y: 0.23, count: 8, inset: 0.23 },
+      { y: 0.34, count: 9, inset: 0.18 },
+      { y: 0.45, count: 10, inset: 0.135 },
+      { y: 0.56, count: 11, inset: 0.105 },
+      { y: 0.68, count: 12, inset: 0.08 },
+      { y: 0.79, count: 13, inset: 0.065 }
+    ];
+    const pegs = [];
+
+    rows.forEach(function (row, rowIndex) {
+      const start = width * row.inset;
+      const end = width * (1 - row.inset);
+      const gap = row.count > 1 ? (end - start) / (row.count - 1) : 0;
+
+      for (let index = 0; index < row.count; index += 1) {
+        const stagger = rowIndex % 2 === 0 ? 0 : gap * 0.08;
+        pegs.push({
+          x: start + gap * index + stagger,
+          y: height * row.y,
+          r: metrics.pegRadius
+        });
+      }
+    });
+
+    return pegs;
   }
 
   function updateDisplay() {
+    const balance = configuredBalance();
+    const ballCount = selectedBallCount();
+    const maxPerBall = Math.max(1, Math.floor(((balance || state.balance) / ballCount) * 100) / 100);
+
     balanceLabelEl.textContent = state.mode === "demo" ? "Demo balance" : "Wallet balance";
-    balanceEl.textContent = amountLabel(configuredBalance());
+    balanceEl.textContent = amountLabel(balance);
     profitEl.textContent = amountLabel(state.profit);
     roundCount.textContent = String(state.history.length);
-    wagerInput.max = String(Math.max(1, Math.floor(configuredBalance() || state.balance)));
+    wagerInput.max = String(maxPerBall);
+    ballCountValueEl.textContent = String(ballCount);
+    playButton.querySelector("span").textContent = ballCount > 1 ? "Launch " + ballCount : "Launch";
+    playButton.title = "RTP " + ((expectedRtpForRisk(state.risk) || TARGET_RTP) * 100).toFixed(2) + "%";
   }
 
   function renderStrip() {
+    const hits = state.lastPockets;
     multiplierStrip.innerHTML = "";
+
     stripSlots().forEach(function (multiplier, index) {
       const pocket = document.createElement("div");
       pocket.className = "pocket";
@@ -232,7 +346,7 @@
         pocket.classList.add("is-center");
       }
 
-      if (state.lastPocket === index) {
+      if (hits.indexOf(index) !== -1) {
         pocket.classList.add("is-hit");
       }
 
@@ -245,19 +359,19 @@
 
     state.history.slice(0, 10).forEach(function (round) {
       const item = document.createElement("li");
-      item.className = round.payout >= round.wager ? "is-win" : "is-loss";
+      item.className = round.payout >= round.totalWager ? "is-win" : "is-loss";
 
       const main = document.createElement("span");
       main.className = "history-main";
-      main.textContent = multiplierLabel(round.multiplier);
+      main.textContent = round.balls > 1 ? round.balls + " balls" : multiplierLabel(round.bestMultiplier);
 
       const side = document.createElement("span");
       side.className = "history-side";
-      side.textContent = round.side.toUpperCase() + " / " + round.risk.toUpperCase();
+      side.textContent = round.sideLabel.toUpperCase() + " / " + round.risk.toUpperCase();
 
       const wager = document.createElement("span");
       wager.className = "history-side";
-      wager.textContent = "Wager " + amountLabel(round.wager);
+      wager.textContent = "Stake " + amountLabel(round.totalWager);
 
       const payout = document.createElement("span");
       payout.className = "history-pay";
@@ -266,22 +380,6 @@
       item.append(main, payout, side, wager);
       historyList.appendChild(item);
     });
-  }
-
-  function weightedTier(weights) {
-    const total = weights.reduce(function (sum, weight) {
-      return sum + weight;
-    }, 0);
-    let roll = Math.random() * total;
-
-    for (let index = 0; index < weights.length; index += 1) {
-      roll -= weights[index];
-      if (roll <= 0) {
-        return index;
-      }
-    }
-
-    return weights.length - 1;
   }
 
   function drawRoundedRect(x, y, width, height, radius) {
@@ -307,273 +405,490 @@
 
     const bg = ctx.createLinearGradient(0, 0, width, height);
     bg.addColorStop(0, "#101410");
-    bg.addColorStop(0.52, "#1a211b");
-    bg.addColorStop(1, "#121514");
+    bg.addColorStop(0.55, "#182019");
+    bg.addColorStop(1, "#101514");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
     drawGrid(width, height);
-    drawRails(width, height);
-    drawTargets(width, height);
-    drawBumpers(width, height);
+    drawLaunchGates(width, height);
+    drawPegs(width, height);
+    drawLandingLane(width, height);
     drawCenterBeacon(width, height);
-
-    if (state.animation) {
-      drawAnimation(width, height);
-    }
+    drawBalls(width, height);
   }
 
   function drawGrid(width, height) {
+    const metrics = boardMetrics(width, height);
     ctx.save();
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = "rgba(244,239,227,0.06)";
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = "rgba(244,239,227,0.055)";
     ctx.lineWidth = 1;
 
-    for (let x = width * 0.075; x <= width * 0.925; x += width * 0.085) {
+    for (let x = metrics.left; x <= metrics.right; x += width * 0.08) {
       ctx.beginPath();
-      ctx.moveTo(x, height * 0.14);
-      ctx.lineTo(x, height * 0.88);
+      ctx.moveTo(x, metrics.top);
+      ctx.lineTo(x, metrics.slotY + 8);
       ctx.stroke();
     }
 
-    for (let y = height * 0.18; y <= height * 0.84; y += height * 0.11) {
+    for (let y = height * 0.18; y <= metrics.slotY; y += height * 0.12) {
       ctx.beginPath();
-      ctx.moveTo(width * 0.055, y);
-      ctx.lineTo(width * 0.945, y);
+      ctx.moveTo(metrics.left, y);
+      ctx.lineTo(metrics.right, y);
       ctx.stroke();
     }
 
     ctx.restore();
   }
 
-  function drawRails(width, height) {
-    const y = height * 0.38;
-    const bottom = height * 0.76;
-    const left = width * 0.075;
-    const right = width * 0.925;
-    const center = width * 0.5;
+  function drawLaunchGates(width, height) {
+    const metrics = boardMetrics(width, height);
+    const gateWidth = clamp(width * 0.07, 42, 58);
+    const gateHeight = clamp(height * 0.1, 38, 52);
 
     ctx.save();
     ctx.lineCap = "round";
-    ctx.lineWidth = 14;
-
-    const leftRail = ctx.createLinearGradient(left, 0, center, 0);
-    leftRail.addColorStop(0, "rgba(216,95,69,0.26)");
-    leftRail.addColorStop(0.72, "rgba(71,199,143,0.28)");
-    leftRail.addColorStop(1, "rgba(227,180,72,0.54)");
-    ctx.strokeStyle = leftRail;
-    ctx.beginPath();
-    ctx.moveTo(left, y);
-    ctx.bezierCurveTo(width * 0.2, y + 80, width * 0.34, y - 70, center, bottom);
-    ctx.stroke();
-
-    const rightRail = ctx.createLinearGradient(center, 0, right, 0);
-    rightRail.addColorStop(0, "rgba(227,180,72,0.54)");
-    rightRail.addColorStop(0.28, "rgba(71,199,143,0.28)");
-    rightRail.addColorStop(1, "rgba(216,95,69,0.26)");
-    ctx.strokeStyle = rightRail;
-    ctx.beginPath();
-    ctx.moveTo(right, y);
-    ctx.bezierCurveTo(width * 0.8, y + 80, width * 0.66, y - 70, center, bottom);
-    ctx.stroke();
-
     ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(244,239,227,0.18)";
+    ctx.strokeStyle = "rgba(227,180,72,0.3)";
+
     ctx.beginPath();
-    ctx.moveTo(left, y);
-    ctx.bezierCurveTo(width * 0.2, y + 80, width * 0.34, y - 70, center, bottom);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(right, y);
-    ctx.bezierCurveTo(width * 0.8, y + 80, width * 0.66, y - 70, center, bottom);
+    ctx.moveTo(metrics.left + gateWidth * 0.55, metrics.gateY);
+    ctx.lineTo(metrics.centerX - width * 0.09, metrics.gateY + height * 0.28);
     ctx.stroke();
 
-    drawGate(left, y, "L");
-    drawGate(right, y, "R");
+    ctx.beginPath();
+    ctx.moveTo(metrics.right - gateWidth * 0.55, metrics.gateY);
+    ctx.lineTo(metrics.centerX + width * 0.09, metrics.gateY + height * 0.28);
+    ctx.stroke();
+
+    drawGate(metrics.left, metrics.gateY, "L", gateWidth, gateHeight);
+    drawGate(metrics.right, metrics.gateY, "R", gateWidth, gateHeight);
     ctx.restore();
   }
 
-  function drawGate(x, y, label) {
+  function drawGate(x, y, label, width, height) {
     ctx.save();
     ctx.translate(x, y);
-    drawRoundedRect(-24, -22, 48, 44, 8);
+    drawRoundedRect(-width / 2, -height / 2, width, height, 8);
     ctx.fillStyle = "rgba(244,239,227,0.07)";
     ctx.fill();
     ctx.strokeStyle = "rgba(244,239,227,0.18)";
     ctx.stroke();
     ctx.fillStyle = "#f4efe3";
-    ctx.font = "800 14px system-ui, sans-serif";
+    ctx.font = "800 13px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, 0, 0);
     ctx.restore();
   }
 
-  function drawTargets(width, height) {
-    const y = height * 0.84;
-    const slots = stripSlots();
-
-    slots.forEach(function (multiplier, index) {
-      const x = lerp(width * 0.075, width * 0.925, index / 14);
-      const isCenter = index === 7;
-      const isHit = state.lastPocket === index;
-      const pocketWidth = Math.max(34, width * 0.048);
-      const pocketHeight = Math.max(28, height * 0.06);
-
-      drawRoundedRect(x - pocketWidth / 2, y - pocketHeight / 2, pocketWidth, pocketHeight, 8);
-      ctx.fillStyle = isCenter ? "rgba(227,180,72,0.18)" : "rgba(244,239,227,0.055)";
-      if (isHit) {
-        ctx.fillStyle = "rgba(71,199,143,0.24)";
-      }
-      ctx.fill();
-      ctx.strokeStyle = isHit ? "rgba(71,199,143,0.85)" : "rgba(244,239,227,0.12)";
-      ctx.lineWidth = isHit ? 2 : 1;
-      ctx.stroke();
-
-      if (width > 700 || index % 2 === 0 || isCenter) {
-        ctx.fillStyle = isCenter ? "#e3b448" : "#aeb8a7";
-        if (isHit) {
-          ctx.fillStyle = "#f4efe3";
-        }
-        ctx.font = "800 12px system-ui, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(multiplierLabel(multiplier), x, y);
-      }
-    });
-  }
-
-  function drawBumpers(width, height) {
-    const rows = [
-      { y: 0.28, spread: 0.18, count: 4 },
-      { y: 0.39, spread: 0.28, count: 5 },
-      { y: 0.5, spread: 0.37, count: 6 },
-      { y: 0.61, spread: 0.43, count: 7 }
-    ];
+  function drawPegs(width, height) {
+    const pegs = createPegs(width, height);
 
     ctx.save();
-    rows.forEach(function (row, rowIndex) {
-      for (let i = 0; i < row.count; i += 1) {
-        const offset = row.count === 1 ? 0 : (i / (row.count - 1) - 0.5) * row.spread;
-        const leftX = width * (0.27 + offset);
-        const rightX = width * (0.73 - offset);
-        const y = height * row.y + (rowIndex % 2 ? 8 : -6);
-        drawBumper(leftX, y, rowIndex);
-        drawBumper(rightX, y, rowIndex);
-      }
+    pegs.forEach(function (peg, index) {
+      const radius = peg.r;
+      const glow = ctx.createRadialGradient(peg.x, peg.y, 1, peg.x, peg.y, radius * 4);
+      glow.addColorStop(0, "rgba(77,184,200,0.34)");
+      glow.addColorStop(1, "rgba(77,184,200,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(peg.x, peg.y, radius * 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = index % 4 === 0 ? "rgba(227,180,72,0.86)" : "rgba(77,184,200,0.92)";
+      ctx.beginPath();
+      ctx.arc(peg.x, peg.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(244,239,227,0.45)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
     });
     ctx.restore();
   }
 
-  function drawBumper(x, y, row) {
-    const radius = 7 + (row % 2) * 2;
-    const glow = ctx.createRadialGradient(x, y, 1, x, y, radius * 3.4);
-    glow.addColorStop(0, "rgba(77,184,200,0.32)");
-    glow.addColorStop(1, "rgba(77,184,200,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, radius * 3.4, 0, Math.PI * 2);
-    ctx.fill();
+  function drawLandingLane(width, height) {
+    const metrics = boardMetrics(width, height);
+    const slots = stripSlots();
+    const hitSet = state.lastPockets;
+    const slot = slotWidth(metrics);
 
-    ctx.fillStyle = "rgba(77,184,200,0.92)";
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(244,239,227,0.46)";
+    ctx.save();
+    ctx.strokeStyle = "rgba(244,239,227,0.12)";
     ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(metrics.left, metrics.slotY + 8);
+    ctx.lineTo(metrics.right, metrics.slotY + 8);
     ctx.stroke();
+
+    for (let index = 0; index < slots.length; index += 1) {
+      const x = slotCenterX(index, metrics);
+      const isHit = hitSet.indexOf(index) !== -1;
+      const isCenter = index === 7;
+
+      if (isHit || isCenter) {
+        const glow = ctx.createRadialGradient(x, metrics.slotY + 4, 1, x, metrics.slotY + 4, slot * 0.8);
+        glow.addColorStop(0, isHit ? "rgba(71,199,143,0.3)" : "rgba(227,180,72,0.25)");
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, metrics.slotY + 4, slot * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = isCenter ? "rgba(227,180,72,0.35)" : "rgba(244,239,227,0.12)";
+      ctx.beginPath();
+      ctx.moveTo(x - slot / 2, metrics.slotY - 16);
+      ctx.lineTo(x - slot / 2, metrics.slotY + 14);
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
   function drawCenterBeacon(width, height) {
-    const x = width * 0.5;
-    const y = height * 0.76;
-    const pulse = state.animation ? 0.15 + Math.sin(performance.now() / 120) * 0.08 : 0.12;
-    const glow = ctx.createRadialGradient(x, y, 2, x, y, width * 0.13);
+    const metrics = boardMetrics(width, height);
+    const pulse = state.animation ? 0.14 + Math.sin(performance.now() / 120) * 0.07 : 0.12;
+    const glow = ctx.createRadialGradient(metrics.centerX, metrics.slotY - 28, 2, metrics.centerX, metrics.slotY - 28, width * 0.1);
     glow.addColorStop(0, "rgba(227,180,72," + pulse + ")");
     glow.addColorStop(1, "rgba(227,180,72,0)");
 
+    ctx.save();
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(x, y, width * 0.13, 0, Math.PI * 2);
+    ctx.arc(metrics.centerX, metrics.slotY - 28, width * 0.1, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(227,180,72,0.62)";
+    ctx.strokeStyle = "rgba(227,180,72,0.56)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, 28, 0, Math.PI * 2);
+    ctx.arc(metrics.centerX, metrics.slotY - 28, clamp(width * 0.035, 18, 30), 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
   }
 
-  function drawAnimation(width, height) {
-    const anim = state.animation;
-    const position = ballPosition(anim);
-    const trailLength = anim.trail.length;
-
-    ctx.save();
-    for (let i = 0; i < trailLength; i += 1) {
-      const point = anim.trail[i];
-      const alpha = (i + 1) / trailLength;
-      ctx.fillStyle = "rgba(71,199,143," + alpha * 0.18 + ")";
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 9 * alpha, 0, Math.PI * 2);
-      ctx.fill();
+  function drawBalls(width, height) {
+    const balls = state.animation ? state.animation.balls : state.restingBalls;
+    if (!balls.length) {
+      return;
     }
 
-    const shadow = ctx.createRadialGradient(position.x, position.y, 1, position.x, position.y, 40);
-    shadow.addColorStop(0, "rgba(71,199,143,0.34)");
+    balls.forEach(function (ball) {
+      if (!ball.active && !ball.settled) {
+        drawQueuedBall(ball, width, height);
+        return;
+      }
+
+      drawTrail(ball);
+      drawBall(ball);
+    });
+  }
+
+  function drawQueuedBall(ball, width, height) {
+    const metrics = boardMetrics(width, height);
+    const direction = ball.side === "left" ? 1 : -1;
+    const x = ball.side === "left" ? metrics.left + direction * 18 : metrics.right + direction * 18;
+    const y = metrics.gateY + ball.queueOffset;
+
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = "#e3b448";
+    ctx.beginPath();
+    ctx.arc(x, y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawTrail(ball) {
+    ctx.save();
+    for (let index = 0; index < ball.trail.length; index += 1) {
+      const point = ball.trail[index];
+      const alpha = (index + 1) / ball.trail.length;
+      ctx.fillStyle = "rgba(71,199,143," + alpha * 0.12 + ")";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, ball.r * alpha, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawBall(ball) {
+    ctx.save();
+    const shadow = ctx.createRadialGradient(ball.x, ball.y, 1, ball.x, ball.y, ball.r * 3.2);
+    shadow.addColorStop(0, "rgba(71,199,143,0.32)");
     shadow.addColorStop(1, "rgba(71,199,143,0)");
     ctx.fillStyle = shadow;
     ctx.beginPath();
-    ctx.arc(position.x, position.y, 40, 0, Math.PI * 2);
+    ctx.arc(ball.x, ball.y, ball.r * 3.2, 0, Math.PI * 2);
     ctx.fill();
 
-    const ball = ctx.createRadialGradient(position.x - 6, position.y - 8, 2, position.x, position.y, 18);
-    ball.addColorStop(0, "#fff7d0");
-    ball.addColorStop(0.35, "#e3b448");
-    ball.addColorStop(1, "#d85f45");
-    ctx.fillStyle = ball;
+    const fill = ctx.createRadialGradient(ball.x - ball.r * 0.38, ball.y - ball.r * 0.5, 1, ball.x, ball.y, ball.r);
+    fill.addColorStop(0, "#fff7d0");
+    fill.addColorStop(0.34, "#e3b448");
+    fill.addColorStop(1, "#d85f45");
+    ctx.fillStyle = fill;
     ctx.beginPath();
-    ctx.arc(position.x, position.y, 16, 0, Math.PI * 2);
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "rgba(244,239,227,0.65)";
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
+  }
 
-    if (position.x < -20 || position.x > width + 20 || position.y > height + 20) {
-      return;
+  function chooseSide() {
+    if (state.side === "left" || state.side === "right") {
+      return state.side;
+    }
+
+    return secureRandom() >= 0.5 ? "left" : "right";
+  }
+
+  function createBall(index, total, wager, side, now, targetTier) {
+    const width = state.view.width;
+    const height = state.view.height;
+    const metrics = boardMetrics(width, height);
+    const risk = physicsByRisk[state.risk];
+    const direction = side === "left" ? 1 : -1;
+    const queueOffset = (index - (total - 1) / 2) * metrics.ballRadius * 0.7;
+    const verticalJitter = (Math.random() - 0.5) * height * risk.spread;
+    const speedJitter = (Math.random() - 0.5) * width * risk.spread;
+    const targetPocket = targetPocketFromTier(side, targetTier);
+    const multiplier = stripSlots()[targetPocket];
+
+    return {
+      id: index,
+      side,
+      risk: state.risk,
+      wager,
+      targetTier,
+      targetPocket,
+      r: metrics.ballRadius,
+      x: side === "left" ? metrics.left + metrics.ballRadius + 4 : metrics.right - metrics.ballRadius - 4,
+      y: metrics.gateY + queueOffset + verticalJitter * 0.16,
+      vx: direction * (width * 0.34 + speedJitter),
+      vy: height * (0.05 + Math.random() * 0.08),
+      spawnAt: now + index * 110,
+      queueOffset,
+      active: false,
+      settled: false,
+      pocket: null,
+      multiplier,
+      payout: roundMoney(wager * multiplier),
+      trail: []
+    };
+  }
+
+  function stepPhysics(animation, timestamp) {
+    if (!animation.lastTime) {
+      animation.lastTime = timestamp;
+    }
+
+    const rawDt = clamp((timestamp - animation.lastTime) / 1000, 0, 0.032);
+    const steps = Math.max(1, Math.ceil(rawDt / 0.008));
+    const dt = rawDt / steps;
+    animation.lastTime = timestamp;
+
+    for (let step = 0; step < steps; step += 1) {
+      animation.balls.forEach(function (ball) {
+        if (ball.settled || timestamp < ball.spawnAt) {
+          return;
+        }
+
+        if (!ball.active) {
+          ball.active = true;
+        }
+
+        integrateBall(ball, dt);
+      });
+
+      animation.balls.forEach(function (ball) {
+        if (ball.active && !ball.settled) {
+          collideWithWalls(ball);
+          collideWithPegs(ball);
+        }
+      });
+
+      collideBalls(animation.balls);
+
+      animation.balls.forEach(function (ball) {
+        if (ball.active && !ball.settled) {
+          settleIfReady(ball);
+        }
+      });
+    }
+
+    animation.balls.forEach(function (ball) {
+      if (!ball.active || ball.settled) {
+        return;
+      }
+
+      ball.trail.push({ x: ball.x, y: ball.y });
+      if (ball.trail.length > 12) {
+        ball.trail.shift();
+      }
+    });
+  }
+
+  function integrateBall(ball, dt) {
+    const width = state.view.width;
+    const height = state.view.height;
+    const metrics = boardMetrics(width, height);
+    const risk = physicsByRisk[ball.risk];
+    const gravity = height * 1.22;
+    const sideBias = ball.side === "left" ? 1 : -1;
+    const centerBias = (state.view.width * 0.5 - ball.x) * 0.12;
+    const targetX = slotCenterX(ball.targetPocket, metrics);
+    const targetPull = clamp((ball.y - height * 0.48) / (height * 0.34), 0, 1);
+
+    ball.vx += (centerBias + sideBias * width * 0.03) * dt;
+    ball.vx += (targetX - ball.x) * 2.4 * targetPull * dt;
+    ball.vy += gravity * dt;
+    ball.vx *= risk.drag;
+    ball.vy *= 0.999;
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+  }
+
+  function collideWithWalls(ball) {
+    const metrics = boardMetrics(state.view.width, state.view.height);
+    const restitution = physicsByRisk[ball.risk].restitution;
+
+    if (ball.x < metrics.left + ball.r) {
+      ball.x = metrics.left + ball.r;
+      ball.vx = Math.abs(ball.vx) * restitution;
+    }
+
+    if (ball.x > metrics.right - ball.r) {
+      ball.x = metrics.right - ball.r;
+      ball.vx = -Math.abs(ball.vx) * restitution;
+    }
+
+    if (ball.y < metrics.top + ball.r) {
+      ball.y = metrics.top + ball.r;
+      ball.vy = Math.abs(ball.vy) * restitution;
     }
   }
 
-  function ballPosition(anim) {
-    const elapsed = performance.now() - anim.startedAt;
-    const t = clamp(elapsed / anim.duration, 0, 1);
-    const forward = easeOutCubic(t);
-    const drop = Math.pow(t, 1.8);
-    const direction = anim.side === "left" ? 1 : -1;
-    const wobble = Math.sin(t * Math.PI * 9 + anim.phase) * 28 * (1 - t);
-    const hitJitter = Math.sin(t * Math.PI * 22) * 6 * (1 - t);
-    const x = lerp(anim.startX, anim.endX, forward) + wobble * 0.36 * direction;
-    const y = lerp(anim.startY, anim.endY, drop) + wobble + hitJitter;
+  function collideWithPegs(ball) {
+    const pegs = createPegs(state.view.width, state.view.height);
+    const restitution = physicsByRisk[ball.risk].restitution;
 
-    return { x: x, y: y, done: t >= 1 };
+    pegs.forEach(function (peg) {
+      const dx = ball.x - peg.x;
+      const dy = ball.y - peg.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = ball.r + peg.r;
+
+      if (!dist || dist >= minDist) {
+        return;
+      }
+
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const overlap = minDist - dist;
+      const velocityAlongNormal = ball.vx * nx + ball.vy * ny;
+
+      ball.x += nx * overlap;
+      ball.y += ny * overlap;
+
+      if (velocityAlongNormal < 0) {
+        ball.vx -= (1 + restitution) * velocityAlongNormal * nx;
+        ball.vy -= (1 + restitution) * velocityAlongNormal * ny;
+      }
+
+      ball.vx += ny * (Math.random() - 0.5) * 22;
+      ball.vy -= Math.abs(nx) * 18;
+    });
   }
 
-  function animate() {
+  function collideBalls(balls) {
+    for (let i = 0; i < balls.length; i += 1) {
+      const a = balls[i];
+      if (!a.active || a.settled) {
+        continue;
+      }
+
+      for (let j = i + 1; j < balls.length; j += 1) {
+        const b = balls[j];
+        if (!b.active || b.settled) {
+          continue;
+        }
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = a.r + b.r;
+
+        if (!dist || dist >= minDist) {
+          continue;
+        }
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const overlap = minDist - dist;
+        const relVx = b.vx - a.vx;
+        const relVy = b.vy - a.vy;
+        const separatingVelocity = relVx * nx + relVy * ny;
+
+        a.x -= nx * overlap * 0.5;
+        a.y -= ny * overlap * 0.5;
+        b.x += nx * overlap * 0.5;
+        b.y += ny * overlap * 0.5;
+
+        if (separatingVelocity > 0) {
+          continue;
+        }
+
+        const impulse = -(1 + 0.72) * separatingVelocity / 2;
+        a.vx -= impulse * nx;
+        a.vy -= impulse * ny;
+        b.vx += impulse * nx;
+        b.vy += impulse * ny;
+      }
+    }
+  }
+
+  function settleIfReady(ball) {
+    const metrics = boardMetrics(state.view.width, state.view.height);
+
+    if (ball.y < metrics.slotY - ball.r || ball.vy < 0) {
+      return;
+    }
+
+    const pocket = ball.targetPocket;
+    const multiplier = ball.multiplier;
+
+    ball.settled = true;
+    ball.pocket = pocket;
+    ball.multiplier = multiplier;
+    ball.x = slotCenterX(pocket, metrics);
+    ball.y = metrics.slotY - ball.r * 0.25;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.trail = [];
+
+    state.lastPockets = state.animation.balls
+      .filter(function (candidate) {
+        return candidate.settled;
+      })
+      .map(function (candidate) {
+        return candidate.pocket;
+      });
+    renderStrip();
+  }
+
+  function animate(timestamp) {
     if (!state.animation) {
       drawBoard();
       return;
     }
 
-    const position = ballPosition(state.animation);
-    state.animation.trail.push({ x: position.x, y: position.y });
-    if (state.animation.trail.length > 14) {
-      state.animation.trail.shift();
-    }
-
+    stepPhysics(state.animation, timestamp);
     drawBoard();
 
-    if (position.done) {
+    if (state.animation.balls.every(function (ball) { return ball.settled; })) {
       finishRound();
       return;
     }
@@ -587,6 +902,8 @@
     }
 
     const wager = selectedWager();
+    const balls = selectedBallCount();
+    const totalWager = roundMoney(wager * balls);
 
     if (wager <= 0) {
       wagerInput.value = "1";
@@ -594,77 +911,94 @@
     }
 
     if (state.mode === "live") {
-      startLiveRound(wager);
+      startLiveRound(wager, balls);
       return;
     }
 
-    if (wager > state.balance) {
-      wagerInput.value = money(state.balance);
+    if (totalWager > state.balance) {
+      wagerInput.value = money(Math.max(1, state.balance / balls));
       return;
     }
 
-    const side = state.side === "random" ? (Math.random() >= 0.5 ? "left" : "right") : state.side;
-    const config = riskConfigs[state.risk];
-    const tier = weightedTier(config.weights);
-    const multiplier = config.multipliers[tier];
-    const payout = Math.round(wager * multiplier * 100) / 100;
+    const now = performance.now();
+    const ballList = [];
+    for (let index = 0; index < balls; index += 1) {
+      const side = chooseSide();
+      const targetTier = weightedTier(activeWeights());
+      ballList.push(createBall(index, balls, wager, side, now, targetTier));
+    }
 
-    state.balance = Math.round((state.balance - wager) * 100) / 100;
+    state.balance = roundMoney(state.balance - totalWager);
     state.playing = true;
-    state.lastPocket = null;
-    playButton.disabled = true;
-    lastResultEl.textContent = side.toUpperCase() + " launch";
-    updateDisplay();
-    renderStrip();
-
-    const width = state.view.width;
-    const height = state.view.height;
+    state.lastPockets = [];
+    state.restingBalls = [];
     state.animation = {
-      side: side,
+      balls: ballList,
       risk: state.risk,
-      tier: tier,
-      wager: wager,
-      multiplier: multiplier,
-      payout: payout,
-      startedAt: performance.now(),
-      duration: 1400 + Math.random() * 360,
-      phase: Math.random() * Math.PI * 2,
-      startX: side === "left" ? width * 0.075 : width * 0.925,
-      startY: height * 0.38,
-      endX: targetX(side, tier),
-      endY: height * 0.84,
-      trail: []
+      requestedSide: state.side,
+      ballWager: wager,
+      totalWager,
+      startedAt: now,
+      lastTime: null
     };
 
+    playButton.disabled = true;
+    lastResultEl.textContent = balls > 1 ? balls + " balls launched" : ballList[0].side.toUpperCase() + " launch";
+    updateDisplay();
+    renderStrip();
     window.requestAnimationFrame(animate);
   }
 
-  function finishRound() {
-    const anim = state.animation;
-    const net = Math.round((anim.payout - anim.wager) * 100) / 100;
+  function sideLabelForBalls(balls) {
+    const sides = balls.reduce(function (set, ball) {
+      if (set.indexOf(ball.side) === -1) {
+        set.push(ball.side);
+      }
+      return set;
+    }, []);
 
-    state.balance = Math.round((state.balance + anim.payout) * 100) / 100;
-    state.profit = Math.round((state.profit + net) * 100) / 100;
-    state.lastPocket = pocketIndex(anim.side, anim.tier);
+    return sides.length > 1 ? "mixed" : sides[0];
+  }
+
+  function finishRound() {
+    const animation = state.animation;
+    const totalPayout = roundMoney(animation.balls.reduce(function (sum, ball) {
+      return sum + ball.payout;
+    }, 0));
+    const net = roundMoney(totalPayout - animation.totalWager);
+    const bestMultiplier = Math.max.apply(null, animation.balls.map(function (ball) {
+      return ball.multiplier;
+    }));
+    const sideLabel = sideLabelForBalls(animation.balls);
+
+    state.balance = roundMoney(state.balance + totalPayout);
+    state.profit = roundMoney(state.profit + net);
     state.history.unshift({
-      side: anim.side,
-      risk: anim.risk,
-      wager: anim.wager,
-      multiplier: anim.multiplier,
-      payout: anim.payout
+      balls: animation.balls.length,
+      sideLabel,
+      risk: animation.risk,
+      wager: animation.ballWager,
+      totalWager: animation.totalWager,
+      bestMultiplier,
+      payout: totalPayout
     });
 
+    state.restingBalls = animation.balls.map(function (ball) {
+      return Object.assign({}, ball, { trail: [] });
+    });
     state.animation = null;
     state.playing = false;
     playButton.disabled = false;
-    lastResultEl.textContent = multiplierLabel(anim.multiplier) + " / " + amountLabel(anim.payout);
+    lastResultEl.textContent = animation.balls.length > 1
+      ? animation.balls.length + " balls / " + amountLabel(totalPayout)
+      : multiplierLabel(bestMultiplier) + " / " + amountLabel(totalPayout);
     updateDisplay();
     renderStrip();
     renderHistory();
     drawBoard();
   }
 
-  async function startLiveRound(wager) {
+  async function startLiveRound(wager, balls) {
     if (!state.wallet.connected) {
       await connectWallet();
       if (!state.wallet.connected) {
@@ -689,7 +1023,9 @@
         },
         body: JSON.stringify({
           wallet: state.wallet.publicKey,
-          wager: wager,
+          wager,
+          balls,
+          totalWager: roundMoney(wager * balls),
           risk: state.risk,
           side: state.side,
           tokenMint: config.token.mintAddress
@@ -715,7 +1051,7 @@
     const rect = canvas.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
     const width = Math.max(320, Math.floor(rect.width));
-    const height = Math.max(300, Math.floor(rect.height));
+    const height = Math.max(280, Math.floor(rect.height));
 
     canvas.width = Math.floor(width * ratio);
     canvas.height = Math.floor(height * ratio);
@@ -733,13 +1069,29 @@
   }
 
   function setRisk(risk) {
+    if (state.playing) {
+      return;
+    }
+
     state.risk = risk;
     riskButtons.forEach(function (button) {
       button.classList.toggle("is-active", button.dataset.risk === risk);
     });
-    state.lastPocket = null;
+    state.lastPockets = [];
+    state.restingBalls = [];
     renderStrip();
     drawBoard();
+  }
+
+  function setBallCount(value) {
+    if (state.playing) {
+      ballCountInput.value = String(state.ballCount);
+      return;
+    }
+
+    state.ballCount = clamp(Math.round(Number(value) || 1), 1, MAX_BALLS);
+    ballCountInput.value = String(state.ballCount);
+    updateDisplay();
   }
 
   sideButtons.forEach(function (button) {
@@ -750,22 +1102,39 @@
 
   riskButtons.forEach(function (button) {
     button.addEventListener("click", function () {
-      if (!state.playing) {
-        setRisk(button.dataset.risk);
-      }
+      setRisk(button.dataset.risk);
+    });
+  });
+
+  modeButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      setMode(button.dataset.mode);
     });
   });
 
   playButton.addEventListener("click", startRound);
+  connectWalletButton.addEventListener("click", connectWallet);
+
+  ballCountInput.addEventListener("input", function () {
+    setBallCount(ballCountInput.value);
+  });
+
+  ballsMinusButton.addEventListener("click", function () {
+    setBallCount(state.ballCount - 1);
+  });
+
+  ballsPlusButton.addEventListener("click", function () {
+    setBallCount(state.ballCount + 1);
+  });
 
   halfButton.addEventListener("click", function () {
     const balance = configuredBalance() || state.balance;
-    wagerInput.value = money(Math.max(1, balance / 2));
+    wagerInput.value = money(Math.max(1, balance / (2 * selectedBallCount())));
   });
 
   maxButton.addEventListener("click", function () {
     const balance = configuredBalance() || state.balance;
-    wagerInput.value = money(Math.max(1, balance));
+    wagerInput.value = money(Math.max(1, balance / selectedBallCount()));
   });
 
   resetButton.addEventListener("click", function () {
@@ -775,8 +1144,10 @@
 
     state.balance = STARTING_BALANCE;
     state.profit = 0;
-    state.lastPocket = null;
+    state.lastPockets = [];
     state.history = [];
+    state.animation = null;
+    state.restingBalls = [];
     lastResultEl.textContent = "Ready";
     updateDisplay();
     renderStrip();
@@ -785,16 +1156,9 @@
   });
 
   wagerInput.addEventListener("blur", function () {
-    const fixed = clamp(selectedWager(), 1, Math.max(1, configuredBalance() || state.balance));
+    const maxPerBall = Math.max(1, (configuredBalance() || state.balance) / selectedBallCount());
+    const fixed = clamp(selectedWager(), 1, maxPerBall);
     wagerInput.value = money(fixed);
-  });
-
-  connectWalletButton.addEventListener("click", connectWallet);
-
-  modeButtons.forEach(function (button) {
-    button.addEventListener("click", function () {
-      setMode(button.dataset.mode);
-    });
   });
 
   if ("ResizeObserver" in window) {
@@ -810,6 +1174,7 @@
   mintStatusEl.textContent = shortAddress(config.token.mintAddress);
   treasuryStatusEl.textContent = shortAddress(config.token.treasuryAddress);
   walletStatusEl.textContent = findSolanaWallet() ? "Ready" : "Not found";
+  setBallCount(1);
   updateDisplay();
   renderStrip();
   renderHistory();

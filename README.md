@@ -38,7 +38,12 @@ The live flow should be:
 2. Backend prepares a round and commits to a hidden server seed.
 3. Player sends the wager token transfer to the treasury or escrow.
 4. Backend verifies the SPL token transfer on-chain.
-5. Backend resolves the round and pays the player from treasury/escrow.
-6. Frontend animates the verified result.
+5. Backend resolves each ball against the published payout table.
+6. Backend pays the player from treasury/escrow.
+7. Frontend animates the verified result.
+
+## Game math
+
+Gamba follows the normal online-casino structure: the random outcome and payout table determine the result first, then the frontend animation displays that result. The demo tables are set to 92.5% RTP, or a 7.5% house edge, across low, medium, and high risk modes. Risk changes volatility, not RTP.
 
 Do not run mainnet token wagering without legal review, geofencing, KYC/AML decisions, responsible gambling controls, and a security review of the settlement wallet or on-chain escrow.

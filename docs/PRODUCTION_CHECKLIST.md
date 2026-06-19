@@ -13,6 +13,7 @@
 - Verify every wager by reading the Solana transaction from RPC.
 - Require the transfer mint, player wallet, treasury wallet, and raw token amount to match the prepared round.
 - Resolve the result only after the wager transaction is confirmed.
+- Determine the paid pocket from the server-side/provably-fair result, not from client animation physics.
 - Pay out from escrow/treasury only after verification succeeds.
 - Prefer an audited on-chain escrow program before public mainnet launch.
 
