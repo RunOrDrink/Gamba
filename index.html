@@ -60,7 +60,7 @@
           <label for="ballCount">Balls <span id="ballCountValue">1</span></label>
           <div class="wager-row">
             <button class="small-button" type="button" id="ballsMinusButton">-</button>
-            <input id="ballCount" type="number" inputmode="numeric" min="1" max="10" step="1" value="1">
+            <input id="ballCount" type="number" inputmode="numeric" min="1" max="20" step="1" value="1">
             <button class="small-button" type="button" id="ballsPlusButton">+</button>
           </div>
         </div>
@@ -68,9 +68,9 @@
         <div class="field">
           <span class="field-label">Side</span>
           <div class="segmented" role="group" aria-label="Launch side">
-            <button type="button" data-side="left">Left</button>
+            <button type="button" data-side="left" class="is-active">Left</button>
             <button type="button" data-side="center" class="is-active">Center</button>
-            <button type="button" data-side="right">Right</button>
+            <button type="button" data-side="right" class="is-active">Right</button>
           </div>
         </div>
 

@@ -23,13 +23,22 @@ function randomSeed() {
   return crypto.randomBytes(32).toString("hex");
 }
 
-function normalizeSide(side, entropyHex) {
-  if (side === "left" || side === "center" || side === "right") {
-    return side;
+const validSides = ["left", "center", "right"];
+
+function normalizeSides(sides) {
+  const source = Array.isArray(sides) ? sides : [sides];
+  const normalized = source.filter((side) => validSides.includes(side));
+  return normalized.length ? Array.from(new Set(normalized)) : validSides;
+}
+
+function normalizeSide(sides, entropyHex) {
+  const normalizedSides = normalizeSides(sides);
+  if (normalizedSides.length === 1) {
+    return normalizedSides[0];
   }
 
-  const roll = Number.parseInt(entropyHex.slice(0, 2), 16) % 3;
-  return roll === 0 ? "left" : roll === 1 ? "center" : "right";
+  const roll = Number.parseInt(entropyHex.slice(0, 2), 16) % normalizedSides.length;
+  return normalizedSides[roll];
 }
 
 function weightedTier(weights, entropyHex) {
@@ -63,7 +72,7 @@ function targetPocketFromTier(side, tier, entropyHex) {
   return Number.parseInt(entropyHex.slice(2, 4), 16) % 2 === 0 ? tier : 14 - tier;
 }
 
-function createPreparedRound({ wallet, wager, balls = 1, totalWager = wager, risk, side, tokenMint }) {
+function createPreparedRound({ wallet, wager, balls = 1, totalWager = wager, risk, sides, side, tokenMint }) {
   if (!riskConfigs[risk]) {
     throw new Error("Invalid risk");
   }
@@ -79,7 +88,7 @@ function createPreparedRound({ wallet, wager, balls = 1, totalWager = wager, ris
     balls,
     totalWager,
     risk,
-    requestedSide: side,
+    requestedSides: normalizeSides(sides || side),
     tokenMint,
     clientSeed,
     serverSeed,
@@ -91,7 +100,7 @@ function createPreparedRound({ wallet, wager, balls = 1, totalWager = wager, ris
 
 function resolveRound(round, paymentSignature) {
   const config = riskConfigs[round.risk];
-  const balls = Math.min(10, Math.max(1, Number(round.balls) || 1));
+  const balls = Math.min(20, Math.max(1, Number(round.balls) || 1));
   const results = [];
   let payout = 0;
 
@@ -99,7 +108,7 @@ function resolveRound(round, paymentSignature) {
     const entropy = hash([round.serverSeed, round.clientSeed, round.roundId, paymentSignature, index].join(":"));
     const tier = weightedTier(config.weights, entropy.slice(16) + entropy.slice(0, 16));
     const multiplier = config.multipliers[tier];
-    const side = normalizeSide(round.requestedSide, entropy);
+    const side = normalizeSide(round.requestedSides, entropy);
     const pocket = targetPocketFromTier(side, tier, entropy);
     const ballPayout = Math.floor(round.wager * multiplier * 100) / 100;
 

@@ -47,7 +47,7 @@ app.post("/api/rounds/prepare", (req, res) => {
     requireConfigured();
 
     const wager = Number(req.body.wager);
-    const balls = Math.min(10, Math.max(1, Math.round(Number(req.body.balls) || 1)));
+    const balls = Math.min(20, Math.max(1, Math.round(Number(req.body.balls) || 1)));
     const totalWager = Math.round(wager * balls * 100) / 100;
 
     if (!Number.isFinite(wager) || wager < config.minWager || wager > config.maxWager) {
@@ -74,7 +74,7 @@ app.post("/api/rounds/prepare", (req, res) => {
       balls,
       totalWager,
       risk: req.body.risk,
-      side: req.body.side,
+      sides: req.body.sides || req.body.side,
       tokenMint: config.tokenMint.toBase58()
     });
 

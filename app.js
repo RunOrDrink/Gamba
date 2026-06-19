@@ -2,7 +2,7 @@
   "use strict";
 
   const STARTING_BALANCE = 1000;
-  const MAX_BALLS = 10;
+  const MAX_BALLS = 20;
   const TARGET_RTP = 0.925;
 
   const defaultConfig = {
@@ -46,9 +46,9 @@
   };
 
   const physicsByRisk = {
-    low: { spread: 0.05, restitution: 0.52, drag: 0.994 },
-    medium: { spread: 0.08, restitution: 0.62, drag: 0.996 },
-    high: { spread: 0.12, restitution: 0.72, drag: 0.998 }
+    low: { spread: 0.05, restitution: 0.58, drag: 0.994, pegKick: 18 },
+    medium: { spread: 0.08, restitution: 0.7, drag: 0.996, pegKick: 28 },
+    high: { spread: 0.12, restitution: 0.82, drag: 0.998, pegKick: 40 }
   };
 
   const state = {
@@ -56,7 +56,7 @@
     liveBalance: null,
     profit: 0,
     risk: "medium",
-    side: "center",
+    selectedSides: ["left", "center", "right"],
     mode: "demo",
     ballCount: 1,
     playing: false,
@@ -287,7 +287,7 @@
       slotY: height * 0.86,
       centerX: width * 0.5,
       ballRadius: clamp(minSide * 0.021, 7, 12),
-      pegRadius: clamp(minSide * 0.012, 4, 7),
+      pegRadius: clamp(minSide * 0.014, 5, 8.5),
       pocketCount,
       slotStep,
       slotLeft: slotStep * 0.5
@@ -305,12 +305,14 @@
   function createPegs(width, height) {
     const metrics = boardMetrics(width, height);
     const rows = [
-      { y: 0.23, count: 8, inset: 0.23 },
-      { y: 0.34, count: 9, inset: 0.18 },
-      { y: 0.45, count: 10, inset: 0.135 },
-      { y: 0.56, count: 11, inset: 0.105 },
-      { y: 0.68, count: 12, inset: 0.08 },
-      { y: 0.79, count: 13, inset: 0.065 }
+      { y: 0.18, count: 9, inset: 0.24 },
+      { y: 0.27, count: 10, inset: 0.2 },
+      { y: 0.36, count: 11, inset: 0.16 },
+      { y: 0.45, count: 12, inset: 0.13 },
+      { y: 0.54, count: 13, inset: 0.105 },
+      { y: 0.63, count: 14, inset: 0.085 },
+      { y: 0.72, count: 15, inset: 0.065 },
+      { y: 0.8, count: 16, inset: 0.045 }
     ];
     const pegs = [];
 
@@ -320,9 +322,14 @@
       const gap = row.count > 1 ? (end - start) / (row.count - 1) : 0;
 
       for (let index = 0; index < row.count; index += 1) {
-        const stagger = rowIndex % 2 === 0 ? 0 : gap * 0.08;
+        const stagger = rowIndex % 2 === 0 ? 0 : gap * 0.5;
+        const x = start + gap * index + stagger;
+        if (x > width * 0.965) {
+          continue;
+        }
+
         pegs.push({
-          x: start + gap * index + stagger,
+          x,
           y: height * row.y,
           r: metrics.pegRadius
         });
@@ -578,16 +585,8 @@
   }
 
   function chooseSide() {
-    if (state.side === "left" || state.side === "center" || state.side === "right") {
-      return state.side;
-    }
-
-    const roll = secureRandom();
-    if (roll < 0.333333) {
-      return "left";
-    }
-
-    return roll < 0.666667 ? "center" : "right";
+    const sides = state.selectedSides.length ? state.selectedSides : ["center"];
+    return sides[Math.floor(secureRandom() * sides.length)];
   }
 
   function createBall(index, total, wager, side, now, targetTier) {
@@ -595,12 +594,13 @@
     const height = state.view.height;
     const metrics = boardMetrics(width, height);
     const risk = physicsByRisk[state.risk];
-    const queueOffset = (index - (total - 1) / 2) * metrics.ballRadius * 0.7;
-    const verticalJitter = (Math.random() - 0.5) * height * risk.spread;
-    const speedJitter = (Math.random() - 0.5) * width * risk.spread;
+    const queueOffset = (index - (total - 1) / 2) * metrics.ballRadius * 0.38;
+    const verticalJitter = (secureRandom() - 0.5) * height * risk.spread;
+    const speedJitter = (secureRandom() - 0.5) * width * risk.spread;
     const targetPocket = targetPocketFromTier(side, targetTier);
     const multiplier = stripSlots()[targetPocket];
     const targetDirection = Math.sign(slotCenterX(targetPocket, metrics) - metrics.centerX) || (secureRandom() >= 0.5 ? 1 : -1);
+    const spawnDelay = total > 10 ? 64 : 92;
     const launchX = side === "left"
       ? metrics.left + metrics.ballRadius + 4
       : side === "right"
@@ -618,8 +618,8 @@
       x: launchX,
       y: metrics.gateY + queueOffset + verticalJitter * 0.16,
       vx: targetDirection * (width * 0.2 + Math.abs(speedJitter)),
-      vy: height * (0.05 + Math.random() * 0.08),
-      spawnAt: now + index * 110,
+      vy: height * (0.05 + secureRandom() * 0.08),
+      spawnAt: now + index * spawnDelay,
       queueOffset,
       active: false,
       settled: false,
@@ -727,7 +727,8 @@
 
   function collideWithPegs(ball) {
     const pegs = createPegs(state.view.width, state.view.height);
-    const restitution = physicsByRisk[ball.risk].restitution;
+    const risk = physicsByRisk[ball.risk];
+    const restitution = risk.restitution;
 
     pegs.forEach(function (peg) {
       const dx = ball.x - peg.x;
@@ -752,8 +753,9 @@
         ball.vy -= (1 + restitution) * velocityAlongNormal * ny;
       }
 
-      ball.vx += ny * (Math.random() - 0.5) * 22;
-      ball.vy -= Math.abs(nx) * 18;
+      ball.vx += ny * (secureRandom() - 0.5) * risk.pegKick;
+      ball.vx += nx * risk.pegKick * 0.22;
+      ball.vy -= Math.abs(nx) * risk.pegKick * 0.5;
     });
   }
 
@@ -906,7 +908,7 @@
     state.animation = {
       balls: ballList,
       risk: state.risk,
-      requestedSide: state.side,
+      requestedSides: state.selectedSides.slice(),
       ballWager: wager,
       totalWager,
       startedAt: now,
@@ -998,7 +1000,7 @@
           balls,
           totalWager: roundMoney(wager * balls),
           risk: state.risk,
-          side: state.side,
+          sides: state.selectedSides.slice(),
           tokenMint: config.token.mintAddress
         })
       });
@@ -1032,11 +1034,25 @@
     drawBoard();
   }
 
-  function setSide(side) {
-    state.side = side;
+  function syncSideButtons() {
     sideButtons.forEach(function (button) {
-      button.classList.toggle("is-active", button.dataset.side === side);
+      button.classList.toggle("is-active", state.selectedSides.indexOf(button.dataset.side) !== -1);
     });
+  }
+
+  function toggleSide(side) {
+    if (state.playing) {
+      return;
+    }
+
+    const selectedIndex = state.selectedSides.indexOf(side);
+    if (selectedIndex === -1) {
+      state.selectedSides.push(side);
+    } else if (state.selectedSides.length > 1) {
+      state.selectedSides.splice(selectedIndex, 1);
+    }
+
+    syncSideButtons();
   }
 
   function setRisk(risk) {
@@ -1067,7 +1083,7 @@
 
   sideButtons.forEach(function (button) {
     button.addEventListener("click", function () {
-      setSide(button.dataset.side);
+      toggleSide(button.dataset.side);
     });
   });
 
@@ -1145,6 +1161,7 @@
   mintStatusEl.textContent = shortAddress(config.token.mintAddress);
   treasuryStatusEl.textContent = shortAddress(config.token.treasuryAddress);
   walletStatusEl.textContent = findSolanaWallet() ? "Ready" : "Not found";
+  syncSideButtons();
   setBallCount(1);
   updateDisplay();
   renderStrip();
