@@ -50,6 +50,7 @@
     medium: { spread: 0.08, restitution: 0.7, drag: 0.996, pegKick: 28 },
     high: { spread: 0.12, restitution: 0.82, drag: 0.998, pegKick: 40 }
   };
+  const PEG_ROW_COUNTS = [17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17];
 
   const state = {
     balance: STARTING_BALANCE,
@@ -144,6 +145,10 @@
 
   function lerp(a, b, t) {
     return a + (b - a) * t;
+  }
+
+  function smoothstep(t) {
+    return t * t * (3 - 2 * t);
   }
 
   function selectedWager() {
@@ -257,15 +262,7 @@
     }, 0);
   }
 
-  function targetPocketFromTier(side, tier) {
-    if (side === "left") {
-      return tier;
-    }
-
-    if (side === "right") {
-      return 14 - tier;
-    }
-
+  function targetPocketFromTier(tier) {
     if (tier === 7) {
       return 7;
     }
@@ -283,13 +280,16 @@
       left: width * 0.025,
       right: width * 0.975,
       top: height * 0.06,
-      gateY: height * 0.15,
-      playTop: height * 0.24,
-      playBottom: height * 0.81,
-      slotY: height * 0.955,
+      gateY: height * 0.13,
+      playTop: height * 0.2,
+      playBottom: height * 0.78,
+      chuteTop: height * 0.8,
+      slotY: height * 0.965,
       centerX: width * 0.5,
-      ballRadius: clamp(minSide * 0.018, 7, 11),
-      pegRadius: clamp(minSide * 0.011, 4.5, 7),
+      pegLeft: width * 0.08,
+      pegRight: width * 0.92,
+      ballRadius: clamp(minSide * 0.0155, 6, 9.5),
+      pegRadius: clamp(minSide * 0.0085, 3.8, 5.8),
       pocketCount,
       slotStep,
       slotLeft: slotStep * 0.5
@@ -300,27 +300,141 @@
     return metrics.slotLeft + metrics.slotStep * index;
   }
 
+  function pegRows(width, height) {
+    const metrics = boardMetrics(width, height);
+
+    return PEG_ROW_COUNTS.map(function (count, rowIndex) {
+      const y = lerp(metrics.playTop, metrics.playBottom, rowIndex / (PEG_ROW_COUNTS.length - 1));
+      const span = metrics.pegRight - metrics.pegLeft;
+      return {
+        count,
+        rowIndex,
+        y,
+        span,
+        start: metrics.pegLeft,
+        gap: count > 1 ? span / (count - 1) : 0
+      };
+    });
+  }
+
   function createPegs(width, height) {
     const metrics = boardMetrics(width, height);
-    const rows = [9, 10, 11, 12, 13, 14, 15, 14];
     const pegs = [];
 
-    rows.forEach(function (count, rowIndex) {
-      const y = lerp(metrics.playTop, metrics.playBottom, rowIndex / (rows.length - 1));
-      const span = width * (0.48 + rowIndex * 0.045);
-      const start = metrics.centerX - span / 2;
-      const gap = count > 1 ? span / (count - 1) : 0;
-
-      for (let index = 0; index < count; index += 1) {
+    pegRows(width, height).forEach(function (row) {
+      for (let index = 0; index < row.count; index += 1) {
         pegs.push({
-          x: start + gap * index,
-          y,
+          x: row.start + row.gap * index,
+          y: row.y,
           r: metrics.pegRadius
         });
       }
     });
 
     return pegs;
+  }
+
+  function launchXForSide(side, metrics) {
+    if (side === "left") {
+      return metrics.width * 0.28;
+    }
+
+    if (side === "right") {
+      return metrics.width * 0.72;
+    }
+
+    return metrics.centerX;
+  }
+
+  function rowGapX(row, x, bias) {
+    if (!row.gap) {
+      return row.start;
+    }
+
+    const gapCount = Math.max(1, row.count - 1);
+    const gapIndex = clamp(Math.round((x - row.start) / row.gap - 0.5 + bias), 0, gapCount - 1);
+    return row.start + row.gap * (gapIndex + 0.5);
+  }
+
+  function buildBallPath(options) {
+    const width = state.view.width;
+    const height = state.view.height;
+    const metrics = boardMetrics(width, height);
+    const rows = pegRows(width, height);
+    const targetX = slotCenterX(options.targetPocket, metrics);
+    const launchX = launchXForSide(options.side, metrics);
+    const sideVector = options.side === "left"
+      ? 1
+      : options.side === "right"
+        ? -1
+        : Math.sign(targetX - metrics.centerX) || (options.ballIndex % 2 === 0 ? 1 : -1);
+    const points = [{
+      x: launchX,
+      y: metrics.gateY + options.queueOffset + options.verticalJitter
+    }];
+
+    points.push({
+      x: launchX + sideVector * metrics.slotStep * 0.5,
+      y: metrics.playTop - height * 0.07
+    });
+
+    rows.forEach(function (row) {
+      const progress = (row.rowIndex + 1) / (rows.length + 1);
+      const baseX = lerp(launchX, targetX, smoothstep(progress));
+      const wave = Math.sin((row.rowIndex + 1) * 1.31 + options.ballIndex * 0.73 + options.targetPocket * 0.41);
+      const routeX = baseX + wave * metrics.slotStep * lerp(0.9, 0.22, progress);
+      const bias = ((options.ballIndex + row.rowIndex + options.targetPocket) % 3 - 1) * 0.18;
+      const gapX = rowGapX(row, routeX, bias);
+      const corridor = lerp(width * 0.23, metrics.slotStep * 0.72, progress);
+
+      points.push({
+        x: clamp(gapX, Math.max(metrics.left + metrics.ballRadius, baseX - corridor), Math.min(metrics.right - metrics.ballRadius, baseX + corridor)),
+        y: row.y
+      });
+    });
+
+    const last = points[points.length - 1];
+    points.push({
+      x: lerp(last.x, targetX, 0.58),
+      y: metrics.chuteTop - metrics.ballRadius * 1.8
+    });
+    points.push({
+      x: targetX + (secureRandom() - 0.5) * metrics.slotStep * 0.22,
+      y: lerp(metrics.chuteTop, metrics.slotY, 0.42)
+    });
+    points.push({
+      x: targetX,
+      y: metrics.slotY - metrics.ballRadius * 0.1
+    });
+
+    return points;
+  }
+
+  function catmullRom(a, b, c, d, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return 0.5 * (
+      2 * b +
+      (-a + c) * t +
+      (2 * a - 5 * b + 4 * c - d) * t2 +
+      (-a + 3 * b - 3 * c + d) * t3
+    );
+  }
+
+  function samplePath(points, progress) {
+    const segmentCount = points.length - 1;
+    const scaled = clamp(progress, 0, 1) * segmentCount;
+    const index = Math.min(segmentCount - 1, Math.floor(scaled));
+    const local = smoothstep(scaled - index);
+    const p0 = points[Math.max(0, index - 1)];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[Math.min(points.length - 1, index + 2)];
+
+    return {
+      x: catmullRom(p0.x, p1.x, p2.x, p3.x, local),
+      y: lerp(p1.y, p2.y, local)
+    };
   }
 
   function updateDisplay() {
@@ -416,9 +530,29 @@
     ctx.fillRect(0, 0, width, height);
 
     drawLaunchGates(width, height);
+    drawPegFrame(width, height);
     drawPegs(width, height);
-    drawCenterBeacon(width, height);
+    drawSlotWalls(width, height);
     drawBalls(width, height);
+  }
+
+  function drawPegFrame(width, height) {
+    const metrics = boardMetrics(width, height);
+    const padX = metrics.slotStep * 0.42;
+    const padY = metrics.ballRadius * 2.2;
+    const x = metrics.pegLeft - padX;
+    const y = metrics.playTop - padY;
+    const frameWidth = metrics.pegRight - metrics.pegLeft + padX * 2;
+    const frameHeight = metrics.playBottom - metrics.playTop + padY * 2;
+
+    ctx.save();
+    drawRoundedRect(x, y, frameWidth, frameHeight, 8);
+    ctx.fillStyle = "rgba(244,239,227,0.018)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(244,239,227,0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawLaunchGates(width, height) {
@@ -436,9 +570,9 @@
     ctx.fill();
     ctx.strokeStyle = "rgba(244,239,227,0.1)";
     ctx.stroke();
-    drawGate(width * 0.28, metrics.gateY, "L", gateWidth, gateHeight, state.selectedSides.indexOf("left") !== -1);
+    drawGate(launchXForSide("left", metrics), metrics.gateY, "L", gateWidth, gateHeight, state.selectedSides.indexOf("left") !== -1);
     drawGate(metrics.centerX, metrics.gateY, "C", gateWidth, gateHeight, state.selectedSides.indexOf("center") !== -1);
-    drawGate(width * 0.72, metrics.gateY, "R", gateWidth, gateHeight, state.selectedSides.indexOf("right") !== -1);
+    drawGate(launchXForSide("right", metrics), metrics.gateY, "R", gateWidth, gateHeight, state.selectedSides.indexOf("right") !== -1);
     ctx.restore();
   }
 
@@ -483,23 +617,31 @@
     ctx.restore();
   }
 
-  function drawCenterBeacon(width, height) {
+  function drawSlotWalls(width, height) {
     const metrics = boardMetrics(width, height);
-    const pulse = state.animation ? 0.14 + Math.sin(performance.now() / 120) * 0.07 : 0.12;
-    const glow = ctx.createRadialGradient(metrics.centerX, metrics.slotY - 28, 2, metrics.centerX, metrics.slotY - 28, width * 0.1);
-    glow.addColorStop(0, "rgba(227,180,72," + pulse + ")");
-    glow.addColorStop(1, "rgba(227,180,72,0)");
+    const wallWidth = clamp(metrics.slotStep * 0.055, 3, 6);
+    const floorY = metrics.slotY + metrics.ballRadius * 1.1;
 
     ctx.save();
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(metrics.centerX, metrics.slotY - 28, width * 0.1, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = "rgba(244,239,227,0.035)";
+    ctx.fillRect(0, metrics.chuteTop, width, floorY - metrics.chuteTop);
+    ctx.strokeStyle = "rgba(244,239,227,0.16)";
+    ctx.lineWidth = wallWidth;
+    ctx.lineCap = "round";
 
-    ctx.strokeStyle = "rgba(227,180,72,0.56)";
-    ctx.lineWidth = 2;
+    for (let index = 1; index < metrics.pocketCount; index += 1) {
+      const x = metrics.slotStep * index;
+      ctx.beginPath();
+      ctx.moveTo(x, metrics.chuteTop);
+      ctx.lineTo(x, floorY);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = "rgba(227,180,72,0.35)";
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(metrics.centerX, metrics.slotY - 28, clamp(width * 0.035, 18, 30), 0, Math.PI * 2);
+    ctx.moveTo(0, metrics.chuteTop);
+    ctx.lineTo(width, metrics.chuteTop);
     ctx.stroke();
     ctx.restore();
   }
@@ -527,11 +669,7 @@
 
   function drawQueuedBall(ball, width, height) {
     const metrics = boardMetrics(width, height);
-    const x = ball.side === "left"
-      ? width * 0.28
-      : ball.side === "right"
-        ? width * 0.72
-        : metrics.centerX;
+    const x = launchXForSide(ball.side, metrics);
     const y = metrics.gateY + ball.queueOffset;
 
     ctx.save();
@@ -586,26 +724,35 @@
   }
 
   function createBall(index, total, wager, side, now, targetTier, resolved) {
-    const width = state.view.width;
     const height = state.view.height;
-    const metrics = boardMetrics(width, height);
+    const metrics = boardMetrics(state.view.width, height);
     const risk = physicsByRisk[state.risk];
     const queueOffset = (index - (total - 1) / 2) * metrics.ballRadius * 0.38;
-    const verticalJitter = (secureRandom() - 0.5) * height * risk.spread;
-    const speedJitter = (secureRandom() - 0.5) * width * risk.spread;
+    const verticalJitter = (secureRandom() - 0.5) * height * risk.spread * 0.16;
     const targetPocket = resolved && Number.isFinite(Number(resolved.pocket))
       ? Number(resolved.pocket)
-      : targetPocketFromTier(side, targetTier);
+      : targetPocketFromTier(targetTier);
     const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
       ? Number(resolved.multiplier)
       : stripSlots()[targetPocket];
-    const targetDirection = Math.sign(slotCenterX(targetPocket, metrics) - metrics.centerX) || (secureRandom() >= 0.5 ? 1 : -1);
     const spawnDelay = total > 10 ? 64 : 92;
-    const launchX = side === "left"
-      ? width * 0.28
-      : side === "right"
-        ? width * 0.72
-        : metrics.centerX;
+    const path = buildBallPath({
+      side,
+      targetPocket,
+      ballIndex: index,
+      queueOffset,
+      verticalJitter
+    });
+    const start = path[0];
+    const routeDistance = path.reduce(function (sum, point, pointIndex) {
+      if (pointIndex === 0) {
+        return sum;
+      }
+
+      const previous = path[pointIndex - 1];
+      return sum + Math.hypot(point.x - previous.x, point.y - previous.y);
+    }, 0);
+    const duration = clamp(routeDistance * 1.55 + height * 0.65 + index * 8, 1350, 2450);
 
     return {
       id: index,
@@ -615,10 +762,16 @@
       targetTier,
       targetPocket,
       r: metrics.ballRadius,
-      x: launchX,
-      y: metrics.gateY + queueOffset + verticalJitter * 0.16,
-      vx: targetDirection * (width * 0.08 + Math.abs(speedJitter) * 0.7),
-      vy: height * (0.05 + secureRandom() * 0.08),
+      x: start.x,
+      y: start.y,
+      vx: 0,
+      vy: 0,
+      path,
+      duration,
+      pathProgress: 0,
+      wobblePhase: secureRandom() * Math.PI * 2,
+      wobbleSize: metrics.ballRadius * (0.28 + risk.spread * 1.8),
+      wobbleFrequency: 18 + secureRandom() * 8,
       spawnAt: now + index * spawnDelay,
       queueOffset,
       active: false,
@@ -637,192 +790,62 @@
       animation.lastTime = timestamp;
     }
 
-    const rawDt = clamp((timestamp - animation.lastTime) / 1000, 0, 0.032);
-    const steps = Math.max(1, Math.ceil(rawDt / 0.008));
-    const dt = rawDt / steps;
     animation.lastTime = timestamp;
 
-    for (let step = 0; step < steps; step += 1) {
-      animation.balls.forEach(function (ball) {
-        if (ball.settled || timestamp < ball.spawnAt) {
-          return;
-        }
-
-        if (!ball.active) {
-          ball.active = true;
-        }
-
-        integrateBall(ball, dt);
-      });
-
-      animation.balls.forEach(function (ball) {
-        if (ball.active && !ball.settled) {
-          collideWithWalls(ball);
-          collideWithPegs(ball);
-        }
-      });
-
-      collideBalls(animation.balls);
-
-      animation.balls.forEach(function (ball) {
-        if (ball.active && !ball.settled) {
-          settleIfReady(ball);
-        }
-      });
-    }
-
     animation.balls.forEach(function (ball) {
-      if (!ball.active || ball.settled) {
+      if (ball.settled || timestamp < ball.spawnAt) {
         return;
       }
 
-      ball.trail.push({ x: ball.x, y: ball.y });
-      if (ball.trail.length > 12) {
-        ball.trail.shift();
+      if (!ball.active) {
+        ball.active = true;
+      }
+
+      followBallPath(ball, timestamp);
+
+      if (!ball.settled) {
+        ball.trail.push({ x: ball.x, y: ball.y });
+        if (ball.trail.length > 12) {
+          ball.trail.shift();
+        }
       }
     });
   }
 
-  function integrateBall(ball, dt) {
-    const width = state.view.width;
-    const height = state.view.height;
-    const metrics = boardMetrics(width, height);
-    const risk = physicsByRisk[ball.risk];
-    const gravity = height * 1.22;
-    const sideBias = ball.side === "left" ? 1 : ball.side === "right" ? -1 : 0;
-    const centerBias = (state.view.width * 0.5 - ball.x) * 0.12;
-    const targetX = slotCenterX(ball.targetPocket, metrics);
-    const captureStart = metrics.slotY - Math.max(82, height * 0.22);
-    const targetY = metrics.slotY - ball.r * 0.1;
-    const targetPull = clamp((ball.y - height * 0.52) / (height * 0.24), 0, 1);
-    const capture = clamp((ball.y - captureStart) / Math.max(1, targetY - captureStart), 0, 1);
-
-    ball.vx += (centerBias + sideBias * width * 0.012) * dt;
-    ball.vx += (targetX - ball.x) * (1.2 + capture * 22) * targetPull * dt;
-    ball.vy += (targetY - ball.y) * capture * 12 * dt;
-    ball.vy += gravity * dt;
-    ball.vx *= risk.drag * (1 - capture * 0.09);
-    ball.vy *= 0.999 * (1 - capture * 0.08);
-    ball.x += ball.vx * dt;
-    ball.y += ball.vy * dt;
-  }
-
-  function collideWithWalls(ball) {
+  function followBallPath(ball, timestamp) {
     const metrics = boardMetrics(state.view.width, state.view.height);
-    const restitution = physicsByRisk[ball.risk].restitution;
+    const elapsed = Math.max(0, timestamp - ball.spawnAt);
+    const rawProgress = clamp(elapsed / ball.duration, 0, 1);
+    const pathProgress = 1 - Math.pow(1 - rawProgress, 1.04);
+    const point = samplePath(ball.path, pathProgress);
+    const chute = clamp((point.y - metrics.chuteTop) / Math.max(1, metrics.slotY - metrics.chuteTop), 0, 1);
+    const wobble = Math.sin(rawProgress * ball.wobbleFrequency + ball.wobblePhase) * ball.wobbleSize * (1 - chute * 0.88);
+    const nextX = clamp(point.x + wobble, metrics.left + ball.r, metrics.right - ball.r);
+    const nextY = point.y;
+    const dt = Math.max(0.016, (timestamp - (ball.lastPathTimestamp || timestamp - 16)) / 1000);
 
-    if (ball.x < metrics.left + ball.r) {
-      ball.x = metrics.left + ball.r;
-      ball.vx = Math.abs(ball.vx) * restitution;
-    }
+    ball.pathProgress = rawProgress;
+    ball.vx = (nextX - ball.x) / dt;
+    ball.vy = (nextY - ball.y) / dt;
+    ball.x = nextX;
+    ball.y = nextY;
+    ball.lastPathTimestamp = timestamp;
 
-    if (ball.x > metrics.right - ball.r) {
-      ball.x = metrics.right - ball.r;
-      ball.vx = -Math.abs(ball.vx) * restitution;
-    }
-
-    if (ball.y < metrics.top + ball.r) {
-      ball.y = metrics.top + ball.r;
-      ball.vy = Math.abs(ball.vy) * restitution;
-    }
-  }
-
-  function collideWithPegs(ball) {
-    const pegs = createPegs(state.view.width, state.view.height);
-    const risk = physicsByRisk[ball.risk];
-    const restitution = risk.restitution;
-
-    pegs.forEach(function (peg) {
-      const dx = ball.x - peg.x;
-      const dy = ball.y - peg.y;
-      const dist = Math.hypot(dx, dy);
-      const minDist = ball.r + peg.r;
-
-      if (!dist || dist >= minDist) {
-        return;
-      }
-
-      const nx = dx / dist;
-      const ny = dy / dist;
-      const overlap = minDist - dist;
-      const velocityAlongNormal = ball.vx * nx + ball.vy * ny;
-
-      ball.x += nx * overlap;
-      ball.y += ny * overlap;
-
-      if (velocityAlongNormal < 0) {
-        ball.vx -= (1 + restitution) * velocityAlongNormal * nx;
-        ball.vy -= (1 + restitution) * velocityAlongNormal * ny;
-      }
-
-      ball.vx += ny * (secureRandom() - 0.5) * risk.pegKick;
-      ball.vx += nx * risk.pegKick * 0.22;
-      ball.vy -= Math.abs(nx) * risk.pegKick * 0.5;
-    });
-  }
-
-  function collideBalls(balls) {
-    for (let i = 0; i < balls.length; i += 1) {
-      const a = balls[i];
-      if (!a.active || a.settled) {
-        continue;
-      }
-
-      for (let j = i + 1; j < balls.length; j += 1) {
-        const b = balls[j];
-        if (!b.active || b.settled) {
-          continue;
-        }
-
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.hypot(dx, dy);
-        const minDist = a.r + b.r;
-
-        if (!dist || dist >= minDist) {
-          continue;
-        }
-
-        const metrics = boardMetrics(state.view.width, state.view.height);
-        const captureLine = metrics.slotY - Math.max(54, state.view.height * 0.18);
-        if (a.y > captureLine || b.y > captureLine) {
-          continue;
-        }
-
-        const nx = dx / dist;
-        const ny = dy / dist;
-        const overlap = minDist - dist;
-        const relVx = b.vx - a.vx;
-        const relVy = b.vy - a.vy;
-        const separatingVelocity = relVx * nx + relVy * ny;
-
-        a.x -= nx * overlap * 0.5;
-        a.y -= ny * overlap * 0.5;
-        b.x += nx * overlap * 0.5;
-        b.y += ny * overlap * 0.5;
-
-        if (separatingVelocity > 0) {
-          continue;
-        }
-
-        const impulse = -(1 + 0.72) * separatingVelocity / 2;
-        a.vx -= impulse * nx;
-        a.vy -= impulse * ny;
-        b.vx += impulse * nx;
-        b.vy += impulse * ny;
-      }
+    if (rawProgress >= 1) {
+      ball.x = slotCenterX(ball.targetPocket, metrics);
+      ball.y = metrics.slotY - ball.r * 0.1;
+      settleBall(ball);
     }
   }
 
-  function settleIfReady(ball) {
-    const metrics = boardMetrics(state.view.width, state.view.height);
-    const targetX = slotCenterX(ball.targetPocket, metrics);
-    const targetY = metrics.slotY - ball.r * 0.1;
-
-    if (ball.y < targetY || ball.vy < -8) {
+  function settleBall(ball) {
+    if (ball.settled) {
       return;
     }
 
+    const metrics = boardMetrics(state.view.width, state.view.height);
+    const targetX = slotCenterX(ball.targetPocket, metrics);
+    const targetY = metrics.slotY - ball.r * 0.1;
     const pocket = ball.targetPocket;
     const multiplier = ball.multiplier;
 

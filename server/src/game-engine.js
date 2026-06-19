@@ -56,15 +56,7 @@ function weightedTier(weights, entropyHex) {
   return weights.length - 1;
 }
 
-function targetPocketFromTier(side, tier, entropyHex) {
-  if (side === "left") {
-    return tier;
-  }
-
-  if (side === "right") {
-    return 14 - tier;
-  }
-
+function targetPocketFromTier(tier, entropyHex) {
   if (tier === 7) {
     return 7;
   }
@@ -109,7 +101,7 @@ function resolveRound(round, paymentSignature) {
     const tier = weightedTier(config.weights, entropy.slice(16) + entropy.slice(0, 16));
     const multiplier = config.multipliers[tier];
     const side = normalizeSide(round.requestedSides, entropy);
-    const pocket = targetPocketFromTier(side, tier, entropy);
+    const pocket = targetPocketFromTier(tier, entropy);
     const ballPayout = Math.floor(round.wager * multiplier * 100) / 100;
 
     payout += ballPayout;
