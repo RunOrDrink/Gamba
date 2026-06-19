@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gamba Side Rush</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="game-shell">
+      <section class="control-panel" aria-label="Game controls">
+        <div class="brand">
+          <span class="brand-mark">G</span>
+          <div>
+            <h1>Gamba</h1>
+            <p>Side Rush</p>
+          </div>
+        </div>
+
+        <div class="metric">
+          <span>Balance</span>
+          <strong id="balance">1000.00</strong>
+        </div>
+
+        <div class="field">
+          <label for="wager">Wager</label>
+          <div class="wager-row">
+            <button class="small-button" type="button" id="halfButton">1/2</button>
+            <input id="wager" type="number" inputmode="decimal" min="1" step="1" value="25">
+            <button class="small-button" type="button" id="maxButton">Max</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Side</span>
+          <div class="segmented" role="group" aria-label="Launch side">
+            <button type="button" data-side="left">Left</button>
+            <button type="button" data-side="random" class="is-active">Random</button>
+            <button type="button" data-side="right">Right</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Risk</span>
+          <div class="segmented" role="group" aria-label="Risk level">
+            <button type="button" data-risk="low">Low</button>
+            <button type="button" data-risk="medium" class="is-active">Medium</button>
+            <button type="button" data-risk="high">High</button>
+          </div>
+        </div>
+
+        <button class="play-button" type="button" id="playButton">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5v14l11-7z"></path>
+          </svg>
+          <span>Launch</span>
+        </button>
+
+        <button class="reset-button" type="button" id="resetButton">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 6v5h-5"></path>
+            <path d="M4.9 12a7 7 0 0 1 11.9-4.9L20 11"></path>
+            <path d="M4 18v-5h5"></path>
+            <path d="M19.1 12a7 7 0 0 1-11.9 4.9L4 13"></path>
+          </svg>
+          <span>Reset demo credits</span>
+        </button>
+      </section>
+
+      <section class="arena" aria-label="Side rush board">
+        <div class="arena-bar">
+          <div class="round-readout" aria-live="polite">
+            <span>Last</span>
+            <strong id="lastResult">Ready</strong>
+          </div>
+          <div class="round-readout">
+            <span>Profit</span>
+            <strong id="profit">0.00</strong>
+          </div>
+        </div>
+
+        <div class="board-wrap">
+          <canvas id="board" width="1200" height="675" aria-label="Animated multiplier board"></canvas>
+        </div>
+
+        <div class="multiplier-strip" id="multiplierStrip" aria-label="Multiplier pockets"></div>
+      </section>
+
+      <aside class="history-panel" aria-label="Round history">
+        <div class="history-head">
+          <h2>Rounds</h2>
+          <span id="roundCount">0</span>
+        </div>
+        <ol class="history-list" id="historyList"></ol>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
