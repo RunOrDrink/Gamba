@@ -257,7 +257,7 @@ input:focus {
 }
 
 .play-button {
-  margin-top: auto;
+  margin-top: 8px;
   border: 0;
   border-radius: 8px;
   background: linear-gradient(135deg, var(--green), var(--gold));
@@ -305,6 +305,7 @@ input:focus {
 .arena {
   display: grid;
   align-content: start;
+  justify-items: center;
   grid-template-rows: max-content max-content max-content;
   gap: 8px;
   min-width: 0;
@@ -316,6 +317,7 @@ input:focus {
   align-items: start;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  width: min(100%, 1060px);
 }
 
 .round-readout {
@@ -340,7 +342,8 @@ input:focus {
 .board-wrap {
   position: relative;
   align-self: start;
-  height: clamp(260px, 46vh, 430px);
+  width: min(100%, 1060px);
+  height: clamp(430px, 62vh, 640px);
   min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(244, 239, 227, 0.1);
@@ -360,6 +363,7 @@ canvas {
   align-self: start;
   grid-template-columns: repeat(15, minmax(0, 1fr));
   gap: 0;
+  width: min(100%, 1060px);
   height: 30px;
   min-width: 0;
 }
@@ -502,8 +506,8 @@ canvas {
 
   .board-wrap,
   canvas {
-    min-height: 260px;
-    height: 340px;
+    min-height: 360px;
+    height: 420px;
   }
 }
 
@@ -534,8 +538,8 @@ canvas {
 
   .board-wrap,
   canvas {
-    min-height: 240px;
-    height: 280px;
+    min-height: 320px;
+    height: 340px;
   }
 
   .pocket {

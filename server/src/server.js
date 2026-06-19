@@ -2,9 +2,10 @@ const express = require("express");
 const cors = require("cors");
 const { Connection, PublicKey } = require("@solana/web3.js");
 const config = require("./config");
-const { createPreparedRound, resolveRound } = require("./game-engine");
+const { createPreparedRound, resolveRound, riskConfigs } = require("./game-engine");
 const {
   decimalToRaw,
+  getTreasuryTokenBalanceRaw,
   rawToDecimal,
   sendTokenPayout,
   verifyTokenPayment
@@ -30,6 +31,21 @@ function corsOrigin(origin, callback) {
   callback(new Error("Origin blocked"));
 }
 
+function scaledPoolRatio() {
+  const boundedRatio = Math.max(0, Math.min(1, config.maxPayoutPoolRatio));
+  return BigInt(Math.floor(boundedRatio * 1_000_000));
+}
+
+function maxPotentialPayout(wager, balls, risk) {
+  const riskConfig = riskConfigs[risk];
+  if (!riskConfig) {
+    throw new Error("Invalid risk");
+  }
+
+  const maxMultiplier = Math.max(...riskConfig.multipliers);
+  return Math.round(wager * balls * maxMultiplier * 100) / 100;
+}
+
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: "64kb" }));
 
@@ -42,7 +58,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.post("/api/rounds/prepare", (req, res) => {
+app.post("/api/rounds/prepare", async (req, res) => {
   try {
     requireConfigured();
 
@@ -68,6 +84,30 @@ app.post("/api/rounds/prepare", (req, res) => {
       return;
     }
 
+    const rawWager = decimalToRaw(totalWager, config.tokenDecimals);
+    const maxPayout = maxPotentialPayout(wager, balls, req.body.risk);
+    const rawMaxPayout = decimalToRaw(maxPayout, config.tokenDecimals);
+    const reserveRaw = decimalToRaw(config.minTreasuryReserve, config.tokenDecimals);
+    const treasuryRaw = await getTreasuryTokenBalanceRaw(connection, {
+      mint: config.tokenMint.toBase58(),
+      treasury: config.treasuryWallet.toBase58()
+    });
+    const poolAfterWager = treasuryRaw + rawWager;
+    const exposedPool = poolAfterWager > reserveRaw ? poolAfterWager - reserveRaw : 0n;
+    const allowedPayout = exposedPool * scaledPoolRatio() / 1_000_000n;
+
+    if (rawMaxPayout > allowedPayout) {
+      res.status(409).json({
+        error: "Treasury pool cannot cover this wager's max payout",
+        maxPayout,
+        rawMaxPayout: rawMaxPayout.toString(),
+        rawTreasuryPool: treasuryRaw.toString(),
+        rawPoolAfterWager: poolAfterWager.toString(),
+        rawAllowedPayout: allowedPayout.toString()
+      });
+      return;
+    }
+
     const round = createPreparedRound({
       wallet: player.toBase58(),
       wager,
@@ -89,7 +129,11 @@ app.post("/api/rounds/prepare", (req, res) => {
       wager,
       balls,
       totalWager,
-      rawWager: decimalToRaw(totalWager, config.tokenDecimals).toString()
+      rawWager: rawWager.toString(),
+      maxPayout,
+      rawMaxPayout: rawMaxPayout.toString(),
+      rawTreasuryPool: treasuryRaw.toString(),
+      rawAllowedPayout: allowedPayout.toString()
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -127,6 +171,15 @@ app.post("/api/rounds/settle", async (req, res) => {
     if (rawPayout > 0n) {
       if (!config.treasuryKeypair) {
         throw new Error("TREASURY_KEYPAIR_JSON is required for payouts");
+      }
+
+      const treasuryRaw = await getTreasuryTokenBalanceRaw(connection, {
+        mint: config.tokenMint.toBase58(),
+        treasury: config.treasuryWallet.toBase58()
+      });
+
+      if (treasuryRaw < rawPayout) {
+        throw new Error("Treasury pool is insufficient for payout");
       }
 
       payoutSignature = await sendTokenPayout(connection, {

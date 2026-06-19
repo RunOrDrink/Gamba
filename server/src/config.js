@@ -42,5 +42,7 @@ module.exports = {
   treasuryKeypair,
   minWager: parseNumber("MIN_WAGER", 1),
   maxWager: parseNumber("MAX_WAGER", 100000),
+  minTreasuryReserve: parseNumber("MIN_TREASURY_RESERVE", 0),
+  maxPayoutPoolRatio: parseNumber("MAX_PAYOUT_POOL_RATIO", 0.8),
   allowedOrigins: env("ALLOWED_ORIGINS", "").split(",").map((origin) => origin.trim()).filter(Boolean)
 };

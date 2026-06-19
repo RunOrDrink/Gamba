@@ -282,12 +282,12 @@
       height,
       left: width * 0.035,
       right: width * 0.965,
-      top: height * 0.09,
-      gateY: height * 0.47,
-      slotY: height * 0.86,
+      top: height * 0.08,
+      gateY: height * 0.16,
+      slotY: height * 0.9,
       centerX: width * 0.5,
-      ballRadius: clamp(minSide * 0.021, 7, 12),
-      pegRadius: clamp(minSide * 0.014, 5, 8.5),
+      ballRadius: clamp(minSide * 0.018, 7, 11),
+      pegRadius: clamp(minSide * 0.011, 4.5, 7),
       pocketCount,
       slotStep,
       slotLeft: slotStep * 0.5
@@ -304,33 +304,20 @@
 
   function createPegs(width, height) {
     const metrics = boardMetrics(width, height);
-    const rows = [
-      { y: 0.18, count: 9, inset: 0.24 },
-      { y: 0.27, count: 10, inset: 0.2 },
-      { y: 0.36, count: 11, inset: 0.16 },
-      { y: 0.45, count: 12, inset: 0.13 },
-      { y: 0.54, count: 13, inset: 0.105 },
-      { y: 0.63, count: 14, inset: 0.085 },
-      { y: 0.72, count: 15, inset: 0.065 },
-      { y: 0.8, count: 16, inset: 0.045 }
-    ];
+    const rows = [3, 4, 5, 6, 7, 8, 9, 10, 11];
     const pegs = [];
 
-    rows.forEach(function (row, rowIndex) {
-      const start = width * row.inset;
-      const end = width * (1 - row.inset);
-      const gap = row.count > 1 ? (end - start) / (row.count - 1) : 0;
+    rows.forEach(function (count, rowIndex) {
+      const y = height * 0.24 + rowIndex * height * 0.065;
+      const maxSpan = width * 0.72;
+      const span = maxSpan * (count - 1) / (rows[rows.length - 1] - 1);
+      const start = metrics.centerX - span / 2;
+      const gap = count > 1 ? span / (count - 1) : 0;
 
-      for (let index = 0; index < row.count; index += 1) {
-        const stagger = rowIndex % 2 === 0 ? 0 : gap * 0.5;
-        const x = start + gap * index + stagger;
-        if (x > width * 0.965) {
-          continue;
-        }
-
+      for (let index = 0; index < count; index += 1) {
         pegs.push({
-          x,
-          y: height * row.y,
+          x: start + gap * index,
+          y,
           r: metrics.pegRadius
         });
       }
@@ -439,13 +426,13 @@
 
   function drawLaunchGates(width, height) {
     const metrics = boardMetrics(width, height);
-    const gateWidth = clamp(width * 0.07, 42, 58);
-    const gateHeight = clamp(height * 0.1, 38, 52);
+    const gateWidth = clamp(width * 0.052, 38, 54);
+    const gateHeight = clamp(height * 0.07, 30, 42);
 
     ctx.save();
-    drawGate(metrics.left, metrics.gateY, "L", gateWidth, gateHeight);
+    drawGate(width * 0.18, metrics.gateY, "L", gateWidth, gateHeight);
     drawGate(metrics.centerX, metrics.gateY, "C", gateWidth, gateHeight);
-    drawGate(metrics.right, metrics.gateY, "R", gateWidth, gateHeight);
+    drawGate(width * 0.82, metrics.gateY, "R", gateWidth, gateHeight);
     ctx.restore();
   }
 
@@ -532,9 +519,9 @@
     const metrics = boardMetrics(width, height);
     const direction = ball.side === "left" ? 1 : ball.side === "right" ? -1 : 0;
     const x = ball.side === "left"
-      ? metrics.left + direction * 18
+      ? width * 0.18
       : ball.side === "right"
-        ? metrics.right + direction * 18
+        ? width * 0.82
         : metrics.centerX;
     const y = metrics.gateY + ball.queueOffset;
 
@@ -602,9 +589,9 @@
     const targetDirection = Math.sign(slotCenterX(targetPocket, metrics) - metrics.centerX) || (secureRandom() >= 0.5 ? 1 : -1);
     const spawnDelay = total > 10 ? 64 : 92;
     const launchX = side === "left"
-      ? metrics.left + metrics.ballRadius + 4
+      ? width * 0.18
       : side === "right"
-        ? metrics.right - metrics.ballRadius - 4
+        ? width * 0.82
         : metrics.centerX;
 
     return {
@@ -617,7 +604,7 @@
       r: metrics.ballRadius,
       x: launchX,
       y: metrics.gateY + queueOffset + verticalJitter * 0.16,
-      vx: targetDirection * (width * 0.2 + Math.abs(speedJitter)),
+      vx: targetDirection * (width * 0.08 + Math.abs(speedJitter) * 0.7),
       vy: height * (0.05 + secureRandom() * 0.08),
       spawnAt: now + index * spawnDelay,
       queueOffset,
@@ -690,13 +677,13 @@
     const sideBias = ball.side === "left" ? 1 : ball.side === "right" ? -1 : 0;
     const centerBias = (state.view.width * 0.5 - ball.x) * 0.12;
     const targetX = slotCenterX(ball.targetPocket, metrics);
-    const captureStart = metrics.slotY - Math.max(54, height * 0.18);
+    const captureStart = metrics.slotY - Math.max(58, height * 0.16);
     const targetY = metrics.slotY - ball.r * 0.25;
-    const targetPull = clamp((ball.y - height * 0.38) / (height * 0.38), 0, 1);
+    const targetPull = clamp((ball.y - height * 0.62) / (height * 0.2), 0, 1);
     const capture = clamp((ball.y - captureStart) / Math.max(1, targetY - captureStart), 0, 1);
 
-    ball.vx += (centerBias + sideBias * width * 0.03) * dt;
-    ball.vx += (targetX - ball.x) * (2.6 + capture * 12) * targetPull * dt;
+    ball.vx += (centerBias + sideBias * width * 0.012) * dt;
+    ball.vx += (targetX - ball.x) * (1.2 + capture * 14) * targetPull * dt;
     ball.vy += (targetY - ball.y) * capture * 8 * dt;
     ball.vy += gravity * dt;
     ball.vx *= risk.drag * (1 - capture * 0.045);

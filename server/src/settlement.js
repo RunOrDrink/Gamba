@@ -70,6 +70,19 @@ async function verifyTokenPayment(connection, params) {
   return true;
 }
 
+async function getTreasuryTokenBalanceRaw(connection, params) {
+  const mint = new PublicKey(params.mint);
+  const treasury = new PublicKey(params.treasury);
+  const treasuryTokenAccount = getAssociatedTokenAddressSync(mint, treasury);
+
+  try {
+    const balance = await connection.getTokenAccountBalance(treasuryTokenAccount, "confirmed");
+    return BigInt(balance.value.amount);
+  } catch (error) {
+    return 0n;
+  }
+}
+
 async function sendTokenPayout(connection, params) {
   const rawAmount = params.rawAmount;
 
@@ -101,6 +114,7 @@ async function sendTokenPayout(connection, params) {
 module.exports = {
   decimalToRaw,
   rawToDecimal,
+  getTreasuryTokenBalanceRaw,
   verifyTokenPayment,
   sendTokenPayout
 };

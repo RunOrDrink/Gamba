@@ -15,6 +15,8 @@
 - Resolve the result only after the wager transaction is confirmed.
 - Determine the paid pocket from the server-side/provably-fair result, not from client animation physics.
 - Pay out from escrow/treasury only after verification succeeds.
+- Treat all wagered coins as treasury pool liquidity, not as per-round isolated funds.
+- Reject wagers whose worst-case payout cannot be covered by the treasury pool after reserve limits.
 - Prefer an audited on-chain escrow program before public mainnet launch.
 
 ## Fairness
