@@ -56,7 +56,7 @@
     liveBalance: null,
     profit: 0,
     risk: "medium",
-    side: "random",
+    side: "center",
     mode: "demo",
     ballCount: 1,
     playing: false,
@@ -258,34 +258,48 @@
   }
 
   function targetPocketFromTier(side, tier) {
-    return side === "left" ? tier : 14 - tier;
+    if (side === "left") {
+      return tier;
+    }
+
+    if (side === "right") {
+      return 14 - tier;
+    }
+
+    if (tier === 7) {
+      return 7;
+    }
+
+    return secureRandom() >= 0.5 ? tier : 14 - tier;
   }
 
   function boardMetrics(width, height) {
     const minSide = Math.min(width, height);
-    const left = width * 0.055;
-    const right = width * 0.945;
+    const pocketCount = 15;
+    const slotStep = width / pocketCount;
     return {
       width,
       height,
-      left,
-      right,
+      left: width * 0.035,
+      right: width * 0.965,
       top: height * 0.09,
       gateY: height * 0.47,
-      slotY: height * 0.9,
+      slotY: height * 0.86,
       centerX: width * 0.5,
       ballRadius: clamp(minSide * 0.021, 7, 12),
       pegRadius: clamp(minSide * 0.012, 4, 7),
-      pocketCount: 15
+      pocketCount,
+      slotStep,
+      slotLeft: slotStep * 0.5
     };
   }
 
   function slotWidth(metrics) {
-    return (metrics.right - metrics.left) / metrics.pocketCount;
+    return metrics.slotStep;
   }
 
   function slotCenterX(index, metrics) {
-    return metrics.left + slotWidth(metrics) * (index + 0.5);
+    return metrics.slotLeft + metrics.slotStep * index;
   }
 
   function createPegs(width, height) {
@@ -410,36 +424,10 @@
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
-    drawGrid(width, height);
     drawLaunchGates(width, height);
     drawPegs(width, height);
-    drawLandingLane(width, height);
     drawCenterBeacon(width, height);
     drawBalls(width, height);
-  }
-
-  function drawGrid(width, height) {
-    const metrics = boardMetrics(width, height);
-    ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.strokeStyle = "rgba(244,239,227,0.055)";
-    ctx.lineWidth = 1;
-
-    for (let x = metrics.left; x <= metrics.right; x += width * 0.08) {
-      ctx.beginPath();
-      ctx.moveTo(x, metrics.top);
-      ctx.lineTo(x, metrics.slotY + 8);
-      ctx.stroke();
-    }
-
-    for (let y = height * 0.18; y <= metrics.slotY; y += height * 0.12) {
-      ctx.beginPath();
-      ctx.moveTo(metrics.left, y);
-      ctx.lineTo(metrics.right, y);
-      ctx.stroke();
-    }
-
-    ctx.restore();
   }
 
   function drawLaunchGates(width, height) {
@@ -448,21 +436,8 @@
     const gateHeight = clamp(height * 0.1, 38, 52);
 
     ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(227,180,72,0.3)";
-
-    ctx.beginPath();
-    ctx.moveTo(metrics.left + gateWidth * 0.55, metrics.gateY);
-    ctx.lineTo(metrics.centerX - width * 0.09, metrics.gateY + height * 0.28);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(metrics.right - gateWidth * 0.55, metrics.gateY);
-    ctx.lineTo(metrics.centerX + width * 0.09, metrics.gateY + height * 0.28);
-    ctx.stroke();
-
     drawGate(metrics.left, metrics.gateY, "L", gateWidth, gateHeight);
+    drawGate(metrics.centerX, metrics.gateY, "C", gateWidth, gateHeight);
     drawGate(metrics.right, metrics.gateY, "R", gateWidth, gateHeight);
     ctx.restore();
   }
@@ -508,45 +483,6 @@
     ctx.restore();
   }
 
-  function drawLandingLane(width, height) {
-    const metrics = boardMetrics(width, height);
-    const slots = stripSlots();
-    const hitSet = state.lastPockets;
-    const slot = slotWidth(metrics);
-
-    ctx.save();
-    ctx.strokeStyle = "rgba(244,239,227,0.12)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(metrics.left, metrics.slotY + 8);
-    ctx.lineTo(metrics.right, metrics.slotY + 8);
-    ctx.stroke();
-
-    for (let index = 0; index < slots.length; index += 1) {
-      const x = slotCenterX(index, metrics);
-      const isHit = hitSet.indexOf(index) !== -1;
-      const isCenter = index === 7;
-
-      if (isHit || isCenter) {
-        const glow = ctx.createRadialGradient(x, metrics.slotY + 4, 1, x, metrics.slotY + 4, slot * 0.8);
-        glow.addColorStop(0, isHit ? "rgba(71,199,143,0.3)" : "rgba(227,180,72,0.25)");
-        glow.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(x, metrics.slotY + 4, slot * 0.8, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.strokeStyle = isCenter ? "rgba(227,180,72,0.35)" : "rgba(244,239,227,0.12)";
-      ctx.beginPath();
-      ctx.moveTo(x - slot / 2, metrics.slotY - 16);
-      ctx.lineTo(x - slot / 2, metrics.slotY + 14);
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-
   function drawCenterBeacon(width, height) {
     const metrics = boardMetrics(width, height);
     const pulse = state.animation ? 0.14 + Math.sin(performance.now() / 120) * 0.07 : 0.12;
@@ -587,8 +523,12 @@
 
   function drawQueuedBall(ball, width, height) {
     const metrics = boardMetrics(width, height);
-    const direction = ball.side === "left" ? 1 : -1;
-    const x = ball.side === "left" ? metrics.left + direction * 18 : metrics.right + direction * 18;
+    const direction = ball.side === "left" ? 1 : ball.side === "right" ? -1 : 0;
+    const x = ball.side === "left"
+      ? metrics.left + direction * 18
+      : ball.side === "right"
+        ? metrics.right + direction * 18
+        : metrics.centerX;
     const y = metrics.gateY + ball.queueOffset;
 
     ctx.save();
@@ -638,11 +578,16 @@
   }
 
   function chooseSide() {
-    if (state.side === "left" || state.side === "right") {
+    if (state.side === "left" || state.side === "center" || state.side === "right") {
       return state.side;
     }
 
-    return secureRandom() >= 0.5 ? "left" : "right";
+    const roll = secureRandom();
+    if (roll < 0.333333) {
+      return "left";
+    }
+
+    return roll < 0.666667 ? "center" : "right";
   }
 
   function createBall(index, total, wager, side, now, targetTier) {
@@ -650,12 +595,17 @@
     const height = state.view.height;
     const metrics = boardMetrics(width, height);
     const risk = physicsByRisk[state.risk];
-    const direction = side === "left" ? 1 : -1;
     const queueOffset = (index - (total - 1) / 2) * metrics.ballRadius * 0.7;
     const verticalJitter = (Math.random() - 0.5) * height * risk.spread;
     const speedJitter = (Math.random() - 0.5) * width * risk.spread;
     const targetPocket = targetPocketFromTier(side, targetTier);
     const multiplier = stripSlots()[targetPocket];
+    const targetDirection = Math.sign(slotCenterX(targetPocket, metrics) - metrics.centerX) || (secureRandom() >= 0.5 ? 1 : -1);
+    const launchX = side === "left"
+      ? metrics.left + metrics.ballRadius + 4
+      : side === "right"
+        ? metrics.right - metrics.ballRadius - 4
+        : metrics.centerX;
 
     return {
       id: index,
@@ -665,9 +615,9 @@
       targetTier,
       targetPocket,
       r: metrics.ballRadius,
-      x: side === "left" ? metrics.left + metrics.ballRadius + 4 : metrics.right - metrics.ballRadius - 4,
+      x: launchX,
       y: metrics.gateY + queueOffset + verticalJitter * 0.16,
-      vx: direction * (width * 0.34 + speedJitter),
+      vx: targetDirection * (width * 0.2 + Math.abs(speedJitter)),
       vy: height * (0.05 + Math.random() * 0.08),
       spawnAt: now + index * 110,
       queueOffset,
@@ -737,16 +687,20 @@
     const metrics = boardMetrics(width, height);
     const risk = physicsByRisk[ball.risk];
     const gravity = height * 1.22;
-    const sideBias = ball.side === "left" ? 1 : -1;
+    const sideBias = ball.side === "left" ? 1 : ball.side === "right" ? -1 : 0;
     const centerBias = (state.view.width * 0.5 - ball.x) * 0.12;
     const targetX = slotCenterX(ball.targetPocket, metrics);
-    const targetPull = clamp((ball.y - height * 0.48) / (height * 0.34), 0, 1);
+    const captureStart = metrics.slotY - Math.max(54, height * 0.18);
+    const targetY = metrics.slotY - ball.r * 0.25;
+    const targetPull = clamp((ball.y - height * 0.38) / (height * 0.38), 0, 1);
+    const capture = clamp((ball.y - captureStart) / Math.max(1, targetY - captureStart), 0, 1);
 
     ball.vx += (centerBias + sideBias * width * 0.03) * dt;
-    ball.vx += (targetX - ball.x) * 2.4 * targetPull * dt;
+    ball.vx += (targetX - ball.x) * (2.6 + capture * 12) * targetPull * dt;
+    ball.vy += (targetY - ball.y) * capture * 8 * dt;
     ball.vy += gravity * dt;
-    ball.vx *= risk.drag;
-    ball.vy *= 0.999;
+    ball.vx *= risk.drag * (1 - capture * 0.045);
+    ball.vy *= 0.999 * (1 - capture * 0.06);
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
   }
@@ -825,6 +779,12 @@
           continue;
         }
 
+        const metrics = boardMetrics(state.view.width, state.view.height);
+        const captureLine = metrics.slotY - Math.max(54, state.view.height * 0.18);
+        if (a.y > captureLine || b.y > captureLine) {
+          continue;
+        }
+
         const nx = dx / dist;
         const ny = dy / dist;
         const overlap = minDist - dist;
@@ -852,8 +812,19 @@
 
   function settleIfReady(ball) {
     const metrics = boardMetrics(state.view.width, state.view.height);
+    const targetX = slotCenterX(ball.targetPocket, metrics);
+    const targetY = metrics.slotY - ball.r * 0.25;
+    const distanceToTarget = Math.abs(ball.x - targetX);
 
-    if (ball.y < metrics.slotY - ball.r || ball.vy < 0) {
+    if (ball.y < targetY - 2 || ball.vy < -8) {
+      return;
+    }
+
+    if (distanceToTarget > ball.r * 0.55) {
+      ball.y = targetY;
+      ball.vy = 0;
+      ball.vx += (targetX - ball.x) * 0.18;
+      ball.vx *= 0.82;
       return;
     }
 
@@ -863,8 +834,8 @@
     ball.settled = true;
     ball.pocket = pocket;
     ball.multiplier = multiplier;
-    ball.x = slotCenterX(pocket, metrics);
-    ball.y = metrics.slotY - ball.r * 0.25;
+    ball.x = targetX;
+    ball.y = targetY;
     ball.vx = 0;
     ball.vy = 0;
     ball.trail = [];
