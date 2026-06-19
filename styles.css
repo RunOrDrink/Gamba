@@ -304,7 +304,8 @@ input:focus {
 
 .arena {
   display: grid;
-  grid-template-rows: auto auto auto;
+  align-content: start;
+  grid-template-rows: max-content max-content max-content;
   gap: 8px;
   min-width: 0;
   padding: 10px;
@@ -312,6 +313,7 @@ input:focus {
 
 .arena-bar {
   display: grid;
+  align-items: start;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
@@ -320,7 +322,9 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  align-self: start;
   gap: 12px;
+  height: 38px;
   min-height: 38px;
   border: 1px solid rgba(244, 239, 227, 0.1);
   border-radius: 8px;
@@ -335,7 +339,8 @@ input:focus {
 
 .board-wrap {
   position: relative;
-  height: clamp(240px, 42vh, 380px);
+  align-self: start;
+  height: clamp(260px, 46vh, 430px);
   min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(244, 239, 227, 0.1);
@@ -352,14 +357,17 @@ canvas {
 
 .multiplier-strip {
   display: grid;
+  align-self: start;
   grid-template-columns: repeat(15, minmax(0, 1fr));
   gap: 0;
+  height: 30px;
   min-width: 0;
 }
 
 .pocket {
   display: grid;
   place-items: center;
+  height: 28px;
   min-width: 0;
   min-height: 28px;
   margin-inline: 2px;
@@ -495,6 +503,7 @@ canvas {
   .board-wrap,
   canvas {
     min-height: 260px;
+    height: 340px;
   }
 }
 
@@ -526,6 +535,7 @@ canvas {
   .board-wrap,
   canvas {
     min-height: 240px;
+    height: 280px;
   }
 
   .pocket {
