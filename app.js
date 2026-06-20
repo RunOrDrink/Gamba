@@ -35,6 +35,13 @@
     }
   };
 
+  const riskOrder = ["low", "medium", "high"];
+  const riskColors = {
+    low: "#4faa1b",
+    medium: "#d99a10",
+    high: "#e0181f"
+  };
+
   const config = Object.assign({}, defaultConfig, window.GAMBA_CONFIG || {});
   config.token = Object.assign({}, defaultConfig.token, (window.GAMBA_CONFIG || {}).token || {});
 
@@ -189,9 +196,13 @@
     return riskConfigs[state.risk].weights;
   }
 
-  function stripSlots() {
-    const multipliers = activeMultipliers();
+  function stripSlotsForRisk(risk) {
+    const multipliers = riskConfigs[risk].multipliers;
     return multipliers.concat(multipliers.slice(0, -1).reverse());
+  }
+
+  function stripSlots() {
+    return stripSlotsForRisk(state.risk);
   }
 
   function expectedRtpForRisk(risk) {
@@ -231,23 +242,30 @@
   function boardMetrics(width, height) {
     const minSide = Math.min(width, height);
     const pocketCount = 15;
-    const slotStep = width / pocketCount;
+    const desiredBoardWidth = width * 0.58;
+    const minBoardWidth = Math.min(420, width * 0.86);
+    const maxBoardWidth = Math.min(540, width * 0.9);
+    const boardWidth = clamp(desiredBoardWidth, minBoardWidth, maxBoardWidth);
+    const boardLeft = (width - boardWidth) / 2;
+    const slotStep = boardWidth / pocketCount;
 
     return {
       width,
       height,
       pocketCount,
+      boardWidth,
+      boardLeft,
       slotStep,
-      slotLeft: slotStep * 0.5,
+      slotLeft: boardLeft + slotStep * 0.5,
       centerX: width * 0.5,
-      gateY: height * 0.075,
-      playTop: height * 0.16,
-      playBottom: height * 0.79,
-      chuteTop: height * 0.855,
-      slotY: height * 0.945,
-      ballRadius: clamp(minSide * 0.011, 4.8, 6.8),
-      pegRadius: clamp(minSide * 0.0068, 3.2, 5),
-      pegGlow: clamp(minSide * 0.026, 14, 24)
+      gateY: height * 0.04,
+      playTop: height * 0.11,
+      playBottom: height * 0.91,
+      chuteTop: height * 0.935,
+      slotY: height * 0.97,
+      ballRadius: clamp(minSide * 0.016, 7.5, 11),
+      pegRadius: clamp(minSide * 0.0074, 3.5, 5.2),
+      pegGlow: clamp(minSide * 0.014, 9, 15)
     };
   }
 
@@ -389,7 +407,7 @@
       state.wallet.publicKey = response.publicKey ? response.publicKey.toString() : "";
       state.wallet.connected = Boolean(state.wallet.publicKey);
       walletStatusEl.textContent = shortAddress(state.wallet.publicKey);
-      connectWalletButton.querySelector("span").textContent = "Wallet connected";
+      connectWalletButton.textContent = "Connected";
       lastResultEl.textContent = state.mode === "live" ? liveReady ? "Token mode ready" : "Token config needed" : "Ready";
     } catch (error) {
       walletStatusEl.textContent = "Rejected";
@@ -455,20 +473,28 @@
     const hits = state.lastPockets;
     multiplierStrip.innerHTML = "";
 
-    stripSlots().forEach(function (multiplier, index) {
-      const pocket = document.createElement("div");
-      pocket.className = "pocket";
-      pocket.textContent = multiplierLabel(multiplier);
+    riskOrder.forEach(function (risk) {
+      const row = document.createElement("div");
+      row.className = "multiplier-row";
+      row.dataset.risk = risk;
 
-      if (index === 7) {
-        pocket.classList.add("is-center");
+      if (risk === state.risk) {
+        row.classList.add("is-active");
       }
 
-      if (hits.indexOf(index) !== -1) {
-        pocket.classList.add("is-hit");
-      }
+      stripSlotsForRisk(risk).forEach(function (multiplier, index) {
+        const pocket = document.createElement("div");
+        pocket.className = "pocket";
+        pocket.textContent = multiplierLabel(multiplier);
 
-      multiplierStrip.appendChild(pocket);
+        if (risk === state.risk && hits.indexOf(index) !== -1) {
+          pocket.classList.add("is-hit");
+        }
+
+        row.appendChild(pocket);
+      });
+
+      multiplierStrip.appendChild(row);
     });
   }
 
@@ -522,9 +548,9 @@
     ctx.clearRect(0, 0, width, height);
 
     const bg = ctx.createLinearGradient(0, 0, width, height);
-    bg.addColorStop(0, "#101410");
-    bg.addColorStop(0.58, "#182019");
-    bg.addColorStop(1, "#101514");
+    bg.addColorStop(0, "#159aaa");
+    bg.addColorStop(0.58, "#18a9a9");
+    bg.addColorStop(1, "#0f8797");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
@@ -536,30 +562,30 @@
 
   function drawDropGate(width, height) {
     const metrics = boardMetrics(width, height);
-    const gateWidth = clamp(width * 0.09, 64, 88);
-    const gateHeight = clamp(height * 0.065, 32, 44);
-    const bandWidth = gateWidth + 42;
-    const bandHeight = gateHeight + 22;
-    const x = metrics.centerX - bandWidth / 2;
-    const y = metrics.gateY - bandHeight / 2;
+    const topY = metrics.playTop - metrics.slotStep * 0.9;
+    const midY = metrics.playTop + metrics.slotStep * 2.3;
+    const bottomY = metrics.playTop + metrics.slotStep * 5.2;
+    const sideWidth = metrics.slotStep * 4.2;
 
     ctx.save();
-    drawRoundedRect(x, y, bandWidth, bandHeight, 8);
-    ctx.fillStyle = "rgba(244,239,227,0.035)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(244,239,227,0.11)";
+    ctx.setLineDash([2, 4]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(5, 92, 113, 0.58)";
+    drawRoundedRect(metrics.boardLeft - sideWidth * 0.36, topY, sideWidth, bottomY - topY, 10);
+    ctx.stroke();
+    drawRoundedRect(metrics.boardLeft + metrics.boardWidth - sideWidth * 0.64, topY, sideWidth, bottomY - topY, 10);
     ctx.stroke();
 
-    drawRoundedRect(metrics.centerX - gateWidth / 2, metrics.gateY - gateHeight / 2, gateWidth, gateHeight, 8);
-    ctx.fillStyle = "rgba(71,199,143,0.18)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(71,199,143,0.68)";
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(5, 92, 113, 0.35)";
+    ctx.beginPath();
+    ctx.moveTo(metrics.boardLeft + metrics.slotStep * 3.8, topY);
+    ctx.quadraticCurveTo(metrics.boardLeft + metrics.slotStep * 3, midY, metrics.boardLeft + metrics.slotStep * 1.2, bottomY);
     ctx.stroke();
-    ctx.fillStyle = "#47c78f";
-    ctx.font = "900 12px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("DROP", metrics.centerX, metrics.gateY);
+    ctx.beginPath();
+    ctx.moveTo(metrics.boardLeft + metrics.boardWidth - metrics.slotStep * 3.8, topY);
+    ctx.quadraticCurveTo(metrics.boardLeft + metrics.boardWidth - metrics.slotStep * 3, midY, metrics.boardLeft + metrics.boardWidth - metrics.slotStep * 1.2, bottomY);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -570,18 +596,18 @@
     ctx.save();
     pegs.forEach(function (peg, index) {
       const glow = ctx.createRadialGradient(peg.x, peg.y, 1, peg.x, peg.y, metrics.pegGlow);
-      glow.addColorStop(0, "rgba(77,184,200,0.35)");
-      glow.addColorStop(1, "rgba(77,184,200,0)");
+      glow.addColorStop(0, "rgba(255,255,255,0.22)");
+      glow.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(peg.x, peg.y, metrics.pegGlow, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = index % 5 === 0 ? "rgba(227,180,72,0.88)" : "rgba(77,184,200,0.94)";
+      ctx.fillStyle = "#edf9ff";
       ctx.beginPath();
       ctx.arc(peg.x, peg.y, peg.r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "rgba(244,239,227,0.45)";
+      ctx.strokeStyle = "rgba(5, 68, 82, 0.28)";
       ctx.lineWidth = 1;
       ctx.stroke();
     });
@@ -590,29 +616,14 @@
 
   function drawSlotWalls(width, height) {
     const metrics = boardMetrics(width, height);
-    const wallWidth = clamp(metrics.slotStep * 0.035, 2, 4);
-    const floorY = metrics.slotY + metrics.ballRadius * 1.1;
+    const floorY = metrics.slotY;
 
     ctx.save();
-    ctx.fillStyle = "rgba(244,239,227,0.018)";
-    ctx.fillRect(0, metrics.chuteTop, width, Math.max(0, floorY - metrics.chuteTop));
-    ctx.strokeStyle = "rgba(244,239,227,0.12)";
-    ctx.lineWidth = wallWidth;
-    ctx.lineCap = "round";
-
-    for (let index = 0; index <= metrics.pocketCount; index += 1) {
-      const x = metrics.slotStep * index;
-      ctx.beginPath();
-      ctx.moveTo(x, metrics.chuteTop);
-      ctx.lineTo(x, floorY);
-      ctx.stroke();
-    }
-
-    ctx.strokeStyle = "rgba(227,180,72,0.35)";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(5, 68, 82, 0.42)";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(0, metrics.chuteTop);
-    ctx.lineTo(width, metrics.chuteTop);
+    ctx.moveTo(metrics.boardLeft, floorY);
+    ctx.lineTo(metrics.boardLeft + metrics.boardWidth, floorY);
     ctx.stroke();
     ctx.restore();
   }
@@ -668,16 +679,16 @@
     const shadow = ctx.createRadialGradient(ball.x, ball.y, 1, ball.x, ball.y, ball.r * 2.8);
 
     ctx.save();
-    shadow.addColorStop(0, "rgba(71,199,143,0.32)");
-    shadow.addColorStop(1, "rgba(71,199,143,0)");
+    shadow.addColorStop(0, "rgba(0,0,0,0.2)");
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = shadow;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.r * 2.8, 0, Math.PI * 2);
     ctx.fill();
 
-    fill.addColorStop(0, "#fff7d0");
-    fill.addColorStop(0.34, "#e3b448");
-    fill.addColorStop(1, "#d85f45");
+    fill.addColorStop(0, "#fff4c7");
+    fill.addColorStop(0.32, ball.color || riskColors[state.risk]);
+    fill.addColorStop(1, ball.color || riskColors[state.risk]);
     ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
@@ -703,6 +714,7 @@
       targetTier: tier,
       targetPocket,
       multiplier,
+      color: riskColors[state.risk] || riskColors.medium,
       payout: resolved && Number.isFinite(Number(resolved.payout))
         ? roundMoney(Number(resolved.payout))
         : roundMoney(wager * multiplier),
@@ -1093,6 +1105,7 @@
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     state.view.width = width;
     state.view.height = height;
+    multiplierStrip.style.width = boardMetrics(width, height).boardWidth + "px";
     drawBoard();
   }
 
