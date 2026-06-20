@@ -46,12 +46,12 @@
   };
 
   const physicsByRisk = {
-    low: { spread: 0.05, restitution: 0.78, drag: 0.997, pegKick: 12 },
-    medium: { spread: 0.08, restitution: 0.86, drag: 0.998, pegKick: 20 },
-    high: { spread: 0.12, restitution: 0.93, drag: 0.999, pegKick: 30 }
+    low: { spread: 0.05, restitution: 0.76, drag: 0.997, pegKick: 9 },
+    medium: { spread: 0.08, restitution: 0.84, drag: 0.998, pegKick: 15 },
+    high: { spread: 0.12, restitution: 0.91, drag: 0.999, pegKick: 22 }
   };
-  const PEG_ROW_COUNTS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
-  const PEG_ROW_STAGGERS = [-0.4, -0.25, -0.1, 0.05, 0.2, 0.35, -0.45, -0.3, -0.15, 0, 0.15, 0.3];
+  const PEG_ROW_COUNTS = [9, 11, 13, 15, 17, 19, 17, 15, 13, 11, 9];
+  const PEG_ROW_STAGGERS = [-0.35, -0.2, -0.05, 0.1, 0.25, 0.38, -0.32, -0.17, -0.02, 0.13, 0.28];
   const PEG_POINT_JITTERS = [-0.12, 0.06, -0.04, 0.11, -0.08, 0.03, 0.13, -0.1, 0.02, -0.14, 0.09, -0.02];
 
   const state = {
@@ -283,8 +283,8 @@
       right: width * 0.975,
       top: height * 0.06,
       gateY: height * 0.09,
-      playTop: height * 0.17,
-      playBottom: height * 0.84,
+      playTop: height * 0.19,
+      playBottom: height * 0.815,
       chuteTop: height * 0.865,
       slotY: height * 0.935,
       centerX: width * 0.5,
@@ -308,7 +308,8 @@
     return PEG_ROW_COUNTS.map(function (count, rowIndex) {
       const y = lerp(metrics.playTop, metrics.playBottom, rowIndex / (PEG_ROW_COUNTS.length - 1));
       const fullSpan = metrics.pegRight - metrics.pegLeft;
-      const span = fullSpan * (count - 1) / (PEG_ROW_COUNTS[PEG_ROW_COUNTS.length - 1] - 1);
+      const maxRowCount = Math.max.apply(null, PEG_ROW_COUNTS);
+      const span = fullSpan * (count - 1) / (maxRowCount - 1);
       const gap = count > 1 ? span / (count - 1) : 0;
       const shiftedStart = metrics.centerX - span / 2 + gap * PEG_ROW_STAGGERS[rowIndex % PEG_ROW_STAGGERS.length];
       const start = clamp(
@@ -348,11 +349,11 @@
 
   function launchXForSide(side, metrics) {
     if (side === "left") {
-      return metrics.width * 0.28;
+      return metrics.width * 0.37;
     }
 
     if (side === "right") {
-      return metrics.width * 0.72;
+      return metrics.width * 0.63;
     }
 
     return metrics.centerX;
@@ -389,13 +390,13 @@
     const ball = {
       x: launchX,
       y: metrics.gateY + options.queueOffset + options.verticalJitter,
-      vx: (targetX - launchX) * 0.82 + scan * width * (0.22 + band * 0.055) + (rng() - 0.5) * width * 0.12,
-      vy: height * (0.12 + rng() * 0.08),
+      vx: (targetX - launchX) * 0.58 + scan * width * (0.13 + band * 0.035) + (rng() - 0.5) * width * 0.07,
+      vy: height * (0.055 + rng() * 0.04),
       r: metrics.ballRadius,
       chutePocket: null
     };
-    const gravity = height * 1.72;
-    const dt = 1 / 75;
+    const gravity = height * 1.02;
+    const dt = 1 / 90;
     const trace = [{ x: ball.x, y: ball.y, t: 0 }];
     let settledPocket = 7;
     let time = 0;
@@ -643,6 +644,9 @@
     const metrics = boardMetrics(width, height);
     const rows = pegRows(width, height);
     const top = rows[0];
+    const widest = rows.reduce(function (best, row) {
+      return row.span > best.span ? row : best;
+    }, rows[0]);
     const bottom = rows[rows.length - 1];
     const padX = metrics.slotStep * 0.38;
     const padY = metrics.ballRadius * 2.3;
@@ -651,8 +655,10 @@
     ctx.beginPath();
     ctx.moveTo(top.start - padX, top.y - padY);
     ctx.lineTo(top.start + top.span + padX, top.y - padY);
+    ctx.lineTo(widest.start + widest.span + padX, widest.y);
     ctx.lineTo(bottom.start + bottom.span + padX, bottom.y + padY);
     ctx.lineTo(bottom.start - padX, bottom.y + padY);
+    ctx.lineTo(widest.start - padX, widest.y);
     ctx.closePath();
     ctx.fillStyle = "rgba(244,239,227,0.018)";
     ctx.fill();
@@ -666,9 +672,9 @@
     const metrics = boardMetrics(width, height);
     const gateWidth = clamp(width * 0.052, 38, 54);
     const gateHeight = clamp(height * 0.07, 30, 42);
-    const bandX = width * 0.2;
+    const bandX = width * 0.31;
     const bandY = metrics.gateY - gateHeight * 0.95;
-    const bandWidth = width * 0.6;
+    const bandWidth = width * 0.38;
     const bandHeight = gateHeight * 1.9;
 
     ctx.save();
@@ -843,7 +849,7 @@
     const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
       ? Number(resolved.multiplier)
       : stripSlots()[targetPocket];
-    const spawnDelay = total > 60 ? 18 : total > 30 ? 28 : total > 10 ? 48 : 92;
+    const spawnDelay = total > 60 ? 26 : total > 30 ? 38 : total > 10 ? 58 : 110;
     const trace = solveBallTrace({
       side,
       targetPocket,
@@ -855,7 +861,7 @@
       seed: randomSeed()
     });
     const start = trace[0];
-    const duration = Math.max(780, trace[trace.length - 1].t * 1000);
+    const duration = Math.max(1150, trace[trace.length - 1].t * 1450);
 
     return {
       id: index,
@@ -915,8 +921,10 @@
   function followBallTrace(ball, timestamp) {
     const metrics = boardMetrics(state.view.width, state.view.height);
     const elapsed = Math.max(0, timestamp - ball.spawnAt);
-    const traceTime = elapsed / 1000;
     const trace = ball.trace;
+    const traceEnd = trace[trace.length - 1].t;
+    const playback = clamp(elapsed / ball.duration, 0, 1);
+    const traceTime = traceEnd * playback;
     let index = ball.traceIndex || 0;
 
     while (index < trace.length - 2 && trace[index + 1].t < traceTime) {
@@ -937,7 +945,7 @@
     ball.y = nextY;
     ball.lastPathTimestamp = timestamp;
 
-    if (elapsed >= ball.duration) {
+    if (playback >= 1) {
       ball.x = slotCenterX(ball.targetPocket, metrics);
       ball.y = metrics.slotY - ball.r * 0.1;
       settleBall(ball);
