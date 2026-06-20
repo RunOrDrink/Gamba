@@ -3,7 +3,7 @@
 
   const STARTING_BALANCE = 1000;
   const MAX_BALLS = 100;
-  const TARGET_RTP = 0.985;
+  const TARGET_RTP = 0.925;
 
   const defaultConfig = {
     appName: "Gamba Side Rush",
@@ -33,19 +33,19 @@
   const riskConfigs = {
     low: {
       multipliers: [0, 0.75, 0.9, 1, 1.01, 1.05, 1.25, 2],
-      weights: [0.02, 0.015, 0.015, 0.829, 0.04, 0.067, 0.01, 0.004]
+      weights: [0.05425, 0.08, 0.12, 0.63575, 0.05, 0.04, 0.015, 0.005]
     },
     medium: {
       multipliers: [0, 0.2, 0.5, 0.8, 1, 1.5, 3, 12],
-      weights: [0.15, 0.07, 0.05, 0.03, 0.451, 0.214, 0.03, 0.005]
+      weights: [0.331, 0.1, 0.08, 0.07, 0.269, 0.12, 0.025, 0.005]
     },
     high: {
       multipliers: [0, 0.1, 0.25, 0.6, 1.5, 5, 18, 75],
-      weights: [0.35, 0.13, 0.08, 0.04, 0.376, 0.014, 0.008, 0.002]
+      weights: [0.704667, 0.12, 0.07, 0.05, 0.040333, 0.008, 0.005, 0.002]
     }
   };
 
-  const HONEYCOMB_COLUMNS = 17;
+  const HONEYCOMB_COLUMNS = 19;
   const TOP_ROW_EXTRA_EACH_SIDE = [0, 2, 2, 2, 1, 1];
   const WEIGHT_SCALE = 1000000;
   const MATTER_STATIC_CATEGORY = 0x0001;
@@ -334,8 +334,8 @@
     const rowGap = fullGap * Math.sqrt(3) / 2;
     const availableHeight = metrics.playBottom - metrics.playTop;
     let rowCount = Math.max(9, Math.floor(availableHeight / rowGap) + 1);
-    const topKeepRatio = 0.48;
-    const shoulderRows = 8;
+    const topKeepRatio = 0.72;
+    const shoulderRows = 5;
 
     if (rowCount % 2 === 0) {
       rowCount -= 1;
@@ -439,19 +439,20 @@
 
   function matterProfile(risk) {
     if (risk === "low") {
-      return { restitution: 0.78, pegRestitution: 0.84, friction: 0.004, frictionAir: 0.0034, gravityScale: 0.0012 };
+      return { restitution: 0.78, pegRestitution: 0.86, friction: 0.004, frictionAir: 0.0042, gravityScale: 0.00092 };
     }
 
     if (risk === "high") {
-      return { restitution: 0.88, pegRestitution: 0.94, friction: 0.002, frictionAir: 0.0024, gravityScale: 0.00138 };
+      return { restitution: 0.88, pegRestitution: 0.95, friction: 0.002, frictionAir: 0.0032, gravityScale: 0.00102 };
     }
 
-    return { restitution: 0.83, pegRestitution: 0.9, friction: 0.003, frictionAir: 0.0028, gravityScale: 0.0013 };
+    return { restitution: 0.83, pegRestitution: 0.91, friction: 0.003, frictionAir: 0.0037, gravityScale: 0.00097 };
   }
 
   function matterStaticOptions(profile) {
     return {
       isStatic: true,
+      label: "static",
       restitution: profile.pegRestitution,
       friction: 0.01,
       frictionStatic: 0,
@@ -471,10 +472,17 @@
     const wallWidth = clamp(metrics.slotStep * 0.035, 2, 4);
     const floorY = metrics.slotY + metrics.ballRadius * 1.1;
     const chuteHeight = Math.max(metrics.ballRadius * 3, floorY - metrics.chuteTop);
+    const wallOptions = Object.assign({}, staticOptions, { label: "wall", restitution: 0.42 });
+    const pegOptions = Object.assign({}, staticOptions, { label: "peg" });
+    const railTop = metrics.playTop + metrics.ballRadius * 2;
+    const railBottom = metrics.chuteTop;
+    const railHeight = railBottom - railTop;
     const walls = [
-      Matter.Bodies.rectangle(metrics.width / 2, floorY + wallWidth / 2, metrics.width + wallWidth * 2, wallWidth, staticOptions),
-      Matter.Bodies.rectangle(-wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, staticOptions),
-      Matter.Bodies.rectangle(metrics.width + wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, staticOptions)
+      Matter.Bodies.rectangle(metrics.width / 2, floorY + wallWidth / 2, metrics.width + wallWidth * 2, wallWidth, wallOptions),
+      Matter.Bodies.rectangle(metrics.pegLeft - metrics.slotStep * 0.4, railTop + railHeight / 2, wallWidth * 2, railHeight, wallOptions),
+      Matter.Bodies.rectangle(metrics.pegRight + metrics.slotStep * 0.4, railTop + railHeight / 2, wallWidth * 2, railHeight, wallOptions),
+      Matter.Bodies.rectangle(-wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, wallOptions),
+      Matter.Bodies.rectangle(metrics.width + wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, wallOptions)
     ];
 
     engine.gravity.x = 0;
@@ -485,7 +493,7 @@
     engine.constraintIterations = 2;
 
     createPegs(metrics.width, metrics.height).forEach(function (peg) {
-      walls.push(Matter.Bodies.circle(peg.x, peg.y, peg.r, staticOptions));
+      walls.push(Matter.Bodies.circle(peg.x, peg.y, peg.r, pegOptions));
     });
 
     for (let index = 0; index <= metrics.pocketCount; index += 1) {
@@ -495,7 +503,7 @@
         metrics.chuteTop + chuteHeight / 2,
         wallWidth,
         chuteHeight,
-        staticOptions
+        wallOptions
       ));
     }
 
@@ -595,8 +603,8 @@
         metrics.right - metrics.ballRadius
       ),
       y: metrics.gateY + options.queueOffset + options.verticalJitter,
-      vx: (rng() - 0.5) * 0.42,
-      vy: 0.02 + rng() * 0.06,
+      vx: (rng() - 0.5) * 0.18,
+      vy: 0.01,
       spin: (rng() - 0.5) * 0.035,
       driftSeed: rng() * Math.PI * 2
     };
@@ -625,21 +633,37 @@
   }
 
   function createLiveMatterPhysics(width, height, risk) {
+    const Matter = window.Matter;
     const metrics = boardMetrics(width, height);
-
-    return {
+    const physics = {
       engine: createMatterEngine(metrics, matterProfile(risk)),
       metrics,
       profile: matterProfile(risk),
       accumulator: 0,
       lastTime: null
     };
+
+    Matter.Events.on(physics.engine, "collisionStart", function (event) {
+      event.pairs.forEach(function (pair) {
+        const bodyA = pair.bodyA;
+        const bodyB = pair.bodyB;
+        const ballBody = bodyA.label === "drop-ball" ? bodyA : bodyB.label === "drop-ball" ? bodyB : null;
+        const pegBody = bodyA.label === "peg" ? bodyA : bodyB.label === "peg" ? bodyB : null;
+
+        if (ballBody && pegBody && ballBody.gambaBall) {
+          applyPegCollisionBias(ballBody.gambaBall, ballBody, pegBody, physics);
+        }
+      });
+    });
+
+    return physics;
   }
 
   function createLiveMatterBody(ball, physics) {
     const Matter = window.Matter;
     const launch = ball.matterLaunch;
     const body = Matter.Bodies.circle(launch.x, launch.y, ball.r, {
+      label: "drop-ball",
       restitution: physics.profile.restitution,
       friction: physics.profile.friction,
       frictionStatic: 0,
@@ -653,6 +677,7 @@
 
     Matter.Body.setVelocity(body, { x: launch.vx, y: launch.vy });
     Matter.Body.setAngularVelocity(body, launch.spin);
+    body.gambaBall = ball;
     Matter.Composite.add(physics.engine.world, body);
 
     ball.body = body;
@@ -705,28 +730,52 @@
     renderStrip();
   }
 
-  function applyNaturalDrift(ball, physics, timestamp) {
-    if (!ball.body || ball.settled) {
+  function applyPegCollisionBias(ball, body, pegBody, physics) {
+    if (!body || ball.settled) {
       return;
     }
 
-    const body = ball.body;
     const metrics = physics.metrics;
+    const progress = clamp((body.position.y - metrics.playTop) / Math.max(1, metrics.playBottom - metrics.playTop), 0, 1);
 
-    if (body.position.y < metrics.playTop || body.position.y > metrics.playBottom) {
+    if (body.position.y < metrics.playTop || body.position.y > metrics.playBottom || progress > 0.86) {
       return;
     }
 
-    const dx = clamp((ball.driftTargetX - body.position.x) / metrics.width, -0.7, 0.7);
-    const progress = clamp((body.position.y - metrics.playTop) / Math.max(1, metrics.playBottom - metrics.playTop), 0, 1);
-    const fade = 1 - smoothstep(clamp((progress - 0.72) / 0.28, 0, 1));
-    const wobble = Math.sin(timestamp * 0.004 + ball.driftSeed) * 0.28;
-    const forceX = body.mass * 0.00012 * ball.driftStrength * fade * (dx + wobble * 0.12);
+    const currentTime = physics.engine.timing.timestamp;
 
-    window.Matter.Body.applyForce(body, body.position, {
-      x: forceX,
-      y: 0
+    if (ball.lastPegBiasAt && currentTime - ball.lastPegBiasAt < 85) {
+      return;
+    }
+
+    const targetDirection = Math.sign(ball.driftTargetX - body.position.x) || 0;
+    const naturalDirection = Math.sign(body.position.x - pegBody.position.x) || targetDirection || (Math.random() > 0.5 ? 1 : -1);
+    const direction = targetDirection && Math.random() < ball.driftStrength ? targetDirection : naturalDirection;
+    const extra = 0.11 + Math.random() * 0.08;
+    const velocity = body.velocity;
+
+    window.Matter.Body.setVelocity(body, {
+      x: clamp(velocity.x + direction * extra, -2.35, 2.35),
+      y: clamp(velocity.y * 0.98, -2.6, 5.2)
     });
+
+    ball.lastPegBiasAt = currentTime;
+  }
+
+  function limitMatterVelocity(ball) {
+    if (!ball.body) {
+      return;
+    }
+
+    const velocity = ball.body.velocity;
+    const cappedVelocity = {
+      x: clamp(velocity.x, -2.4, 2.4),
+      y: clamp(velocity.y, -2.4, 4.2)
+    };
+
+    if (cappedVelocity.x !== velocity.x || cappedVelocity.y !== velocity.y) {
+      window.Matter.Body.setVelocity(ball.body, cappedVelocity);
+    }
   }
 
   function stepLiveMatterPhysics(animation, timestamp) {
@@ -743,10 +792,6 @@
       if (!ball.active && !ball.settled && timestamp >= ball.spawnAt) {
         createLiveMatterBody(ball, physics);
       }
-
-      if (ball.active && !ball.settled) {
-        applyNaturalDrift(ball, physics, timestamp);
-      }
     });
 
     physics.accumulator += clamp(timestamp - physics.lastTime, 0, 50);
@@ -754,6 +799,11 @@
 
     while (physics.accumulator >= stepMs) {
       window.Matter.Engine.update(physics.engine, stepMs);
+      animation.balls.forEach(function (ball) {
+        if (ball.active && !ball.settled) {
+          limitMatterVelocity(ball);
+        }
+      });
       physics.accumulator -= stepMs;
     }
 
@@ -774,7 +824,7 @@
 
       if (
         ball.y >= physics.metrics.slotY - ball.r * 0.1 ||
-        (timestamp - ball.spawnAt > 9000 && ball.y > physics.metrics.playBottom)
+        (timestamp - ball.spawnAt > 18000 && ball.y > physics.metrics.playBottom)
       ) {
         settleMatterBall(ball, animation);
       }
@@ -1308,11 +1358,11 @@
       payout: resolved && Number.isFinite(Number(resolved.payout))
         ? roundMoney(Number(resolved.payout))
         : roundMoney(wager * multiplier),
-      lockedPayout: Boolean(resolved),
+      lockedPayout: true,
       matterLaunch,
       driftTargetX: slotCenterX(displayPocket, metrics),
       driftSeed: matterLaunch ? matterLaunch.driftSeed : randomSeed(),
-      driftStrength: resolved ? 1 : 0.45,
+      driftStrength: resolved ? 0.24 : 0.14,
       trail: []
     };
   }
