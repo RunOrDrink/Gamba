@@ -430,6 +430,101 @@
     };
   }
 
+  function plannedRowStep(row, x, side, metrics, profile, clearance, noise) {
+    const impact = rowDeflection(row, x, side, clearance);
+    const hitX = clamp(
+      impact.x,
+      metrics.left + metrics.ballRadius,
+      metrics.right - metrics.ballRadius
+    );
+    const maxStep = row.gap * 1.35;
+    const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
+    const sameSideKick = impact.side * row.gap * profile.bounce;
+    const exitDesiredX = boundedHitX + sameSideKick + noise.wobble * row.gap * profile.wobble;
+    const exitX = clamp(
+      exitDesiredX,
+      Math.max(metrics.left + metrics.ballRadius, x - maxStep),
+      Math.min(metrics.right - metrics.ballRadius, x + maxStep)
+    );
+
+    return {
+      hitX: boundedHitX,
+      exitX,
+      side: impact.side
+    };
+  }
+
+  function pocketDistance(x, pocketLeft, pocketRight, targetX) {
+    if (x < pocketLeft) {
+      return pocketLeft - x + Math.abs(targetX - x) * 0.25;
+    }
+
+    if (x > pocketRight) {
+      return x - pocketRight + Math.abs(targetX - x) * 0.25;
+    }
+
+    return Math.abs(targetX - x) * 0.05;
+  }
+
+  function chooseBouncePlan(rows, metrics, launchX, targetPocket, profile, clearance, rng) {
+    const targetX = slotCenterX(targetPocket, metrics);
+    const pocketLeft = targetPocket * metrics.slotStep + metrics.ballRadius * 1.35;
+    const pocketRight = (targetPocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35;
+    const noise = rows.map(function () {
+      return {
+        wobble: rng() - 0.5,
+        rowTime: profile.rowTime + rng() * 0.05
+      };
+    });
+    let states = [{
+      x: launchX,
+      sides: [],
+      score: 0,
+      lastSide: 0
+    }];
+
+    rows.forEach(function (row, rowIndex) {
+      const progress = (rowIndex + 1) / (rows.length + 1);
+      const guideX = lerp(launchX, targetX, smoothstep(progress));
+      const remainingRows = Math.max(0, rows.length - rowIndex - 1);
+      const naturalReach = remainingRows * row.gap * (0.42 + profile.bounce);
+      const expanded = [];
+
+      states.forEach(function (stateItem) {
+        [-1, 1].forEach(function (side) {
+          const step = plannedRowStep(row, stateItem.x, side, metrics, profile, clearance, noise[rowIndex]);
+          const corridorCost = Math.abs(step.exitX - guideX) * 0.18;
+          const recoveryCost = Math.max(0, Math.abs(step.exitX - targetX) - naturalReach) * 0.85;
+          const switchCost = stateItem.lastSide && stateItem.lastSide !== side ? row.gap * 0.018 : 0;
+          const randomness = (rng() - 0.5) * row.gap * 0.03;
+
+          expanded.push({
+            x: step.exitX,
+            sides: stateItem.sides.concat(side),
+            score: stateItem.score * 0.94 + corridorCost + recoveryCost + switchCost + randomness,
+            lastSide: side
+          });
+        });
+      });
+
+      expanded.sort(function (a, b) {
+        return a.score - b.score;
+      });
+      states = expanded.slice(0, 64);
+    });
+
+    states.sort(function (a, b) {
+      const aScore = a.score + pocketDistance(a.x, pocketLeft, pocketRight, targetX) * 4;
+      const bScore = b.score + pocketDistance(b.x, pocketLeft, pocketRight, targetX) * 4;
+      return aScore - bScore;
+    });
+
+    return {
+      sides: states[0] ? states[0].sides : [],
+      noise
+    };
+  }
+
   function buildDropTrace(options) {
     const width = state.view.width;
     const height = state.view.height;
@@ -437,7 +532,6 @@
     const rows = pegRows(width, height);
     const rng = seededRandom(options.seed);
     const launchX = launchXForSide(options.side, metrics);
-    const targetX = slotCenterX(options.targetPocket, metrics);
     const profile = {
       low: { wobble: 0.04, rowTime: 0.27, bounce: 0.32 },
       medium: { wobble: 0.06, rowTime: 0.25, bounce: 0.44 },
@@ -481,48 +575,29 @@
       x = launchX;
     }
 
+    const plan = chooseBouncePlan(rows, metrics, launchX, options.targetPocket, profile, clearance, rng);
+
     rows.forEach(function (row, rowIndex) {
-      const progress = (rowIndex + 1) / (rows.length + 1);
-      const remainingRows = Math.max(1, rows.length - rowIndex - 1);
-      const remainingX = targetX - x;
-      const targetSide = remainingX >= 0 ? 1 : -1;
-      const maxNaturalReach = remainingRows * row.gap * (0.78 + profile.bounce * 0.4);
-      const urgency = clamp((Math.abs(remainingX) - maxNaturalReach * 0.42) / Math.max(row.gap, maxNaturalReach * 0.58), 0, 1);
-      const lateBias = smoothstep(clamp((progress - 0.52) / 0.34, 0, 1));
-      const targetBias = clamp(Math.abs(remainingX) / (metrics.slotStep * 4.8), 0, 0.28);
-      const chanceTowardTarget = clamp(0.5 + targetBias + urgency * 0.28 + lateBias * 0.18, 0.5, 0.94);
-      const forceTowardTarget = Math.abs(remainingX) > maxNaturalReach * 0.72 ||
-        (rowIndex > rows.length - 9 && Math.abs(remainingX) > metrics.slotStep * 0.32);
-      const side = forceTowardTarget || rng() < chanceTowardTarget ? targetSide : -targetSide;
-      const impact = rowDeflection(row, x, side, clearance);
-      const hitX = clamp(
-        impact.x,
-        metrics.left + metrics.ballRadius,
-        metrics.right - metrics.ballRadius
-      );
-      const maxStep = row.gap * 1.35;
-      const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
-      const rowTime = (profile.rowTime + rng() * 0.05) * (rowIndex < 3 ? 1.28 : 1);
+      const noise = plan.noise[rowIndex] || {
+        wobble: rng() - 0.5,
+        rowTime: profile.rowTime + rng() * 0.05
+      };
+      const side = plan.sides[rowIndex] || (rng() >= 0.5 ? 1 : -1);
+      const step = plannedRowStep(row, x, side, metrics, profile, clearance, noise);
+      const rowTime = noise.rowTime * (rowIndex < 3 ? 1.28 : 1);
       const aboveY = row.y - metrics.pegRadius * 2.3;
       const exitY = row.y + metrics.pegRadius * 2.4;
-      const sameSideKick = impact.side * row.gap * profile.bounce;
-      const exitDesiredX = boundedHitX + sameSideKick + (rng() - 0.5) * row.gap * profile.wobble;
-      const exitX = clamp(
-        exitDesiredX,
-        Math.max(metrics.left + metrics.ballRadius, x - maxStep),
-        Math.min(metrics.right - metrics.ballRadius, x + maxStep)
-      );
 
       time += rowTime * 0.36;
       trace.push({ x, y: aboveY, t: time, ease: "fall" });
       time += rowTime * 0.28;
-      trace.push({ x: boundedHitX, y: row.y, t: time });
+      trace.push({ x: step.hitX, y: row.y, t: time });
       time += rowTime * 0.36;
-      trace.push({ x: exitX, y: exitY, t: time, ease: "bounce" });
-      x = exitX;
+      trace.push({ x: step.exitX, y: exitY, t: time, ease: "bounce" });
+      x = step.exitX;
     });
 
-    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.04, pocketLeft, pocketRight);
+    const chuteX = clamp(x, pocketLeft, pocketRight);
 
     time += 0.22;
     trace.push({
@@ -540,14 +615,14 @@
     });
     time += 0.22;
     trace.push({
-      x: clamp(lerp(chuteX, targetX, 0.55), pocketLeft, pocketRight),
+      x: chuteX,
       y: lerp(metrics.chuteTop, metrics.slotY, 0.56),
       t: time,
       ease: "fall"
     });
     time += 0.22;
     trace.push({
-      x: targetX,
+      x: chuteX,
       y: metrics.slotY - metrics.ballRadius * 0.1,
       t: time,
       ease: "fall"
@@ -860,6 +935,7 @@
       wager,
       targetTier,
       targetPocket,
+      settleX: trace[trace.length - 1].x,
       r: metrics.ballRadius,
       x: start.x,
       y: start.y,
@@ -938,7 +1014,7 @@
     ball.lastPathTimestamp = timestamp;
 
     if (playback >= 1) {
-      ball.x = slotCenterX(ball.targetPocket, metrics);
+      ball.x = Number.isFinite(ball.settleX) ? ball.settleX : slotCenterX(ball.targetPocket, metrics);
       ball.y = metrics.slotY - ball.r * 0.1;
       settleBall(ball);
     }
@@ -950,7 +1026,7 @@
     }
 
     const metrics = boardMetrics(state.view.width, state.view.height);
-    const targetX = slotCenterX(ball.targetPocket, metrics);
+    const targetX = Number.isFinite(ball.settleX) ? ball.settleX : slotCenterX(ball.targetPocket, metrics);
     const targetY = metrics.slotY - ball.r * 0.1;
     const pocket = ball.targetPocket;
     const multiplier = ball.multiplier;
