@@ -365,7 +365,7 @@ canvas {
   gap: 0;
   width: min(100%, 1060px);
   height: 34px;
-  margin-top: -8px;
+  margin-top: -34px;
   min-width: 0;
 }
 

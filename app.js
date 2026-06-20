@@ -283,8 +283,8 @@
       gateY: height * 0.09,
       playTop: height * 0.17,
       playBottom: height * 0.795,
-      chuteTop: height * 0.825,
-      slotY: height * 0.968,
+      chuteTop: height * 0.84,
+      slotY: height * 0.948,
       centerX: width * 0.5,
       pegLeft: slotStep * 0.5,
       pegRight: width - slotStep * 0.5,
@@ -388,13 +388,21 @@
     return clamp(Math.floor(x / metrics.slotStep), 0, metrics.pocketCount - 1);
   }
 
-  function rowDeflectionX(row, desiredX, clearance) {
-    const pegIndex = clamp(Math.round((desiredX - row.start) / row.gap), 0, row.count - 1);
+  function rowDeflection(row, incomingX, desiredX, clearance) {
+    const approachX = lerp(incomingX, desiredX, 0.42);
+    const pegIndex = clamp(Math.round((approachX - row.start) / row.gap), 0, row.count - 1);
     const pegX = row.start + row.gap * pegIndex;
-    const leftX = pegX - clearance;
-    const rightX = pegX + clearance;
+    let side = incomingX >= pegX ? 1 : -1;
 
-    return Math.abs(desiredX - leftX) < Math.abs(desiredX - rightX) ? leftX : rightX;
+    if (Math.abs(incomingX - pegX) < clearance * 0.35) {
+      side = desiredX >= pegX ? 1 : -1;
+    }
+
+    return {
+      x: pegX + side * clearance,
+      pegX,
+      side
+    };
   }
 
   function buildDropTrace(options) {
@@ -406,10 +414,10 @@
     const launchX = launchXForSide(options.side, metrics);
     const targetX = slotCenterX(options.targetPocket, metrics);
     const profile = {
-      low: { maxStep: 0.62, wobble: 0.16, rowTime: 0.18 },
-      medium: { maxStep: 0.74, wobble: 0.24, rowTime: 0.17 },
-      high: { maxStep: 0.9, wobble: 0.34, rowTime: 0.16 }
-    }[options.risk] || { maxStep: 0.74, wobble: 0.24, rowTime: 0.17 };
+      low: { maxStep: 0.56, wobble: 0.08, rowTime: 0.3, bounce: 0.2 },
+      medium: { maxStep: 0.66, wobble: 0.12, rowTime: 0.29, bounce: 0.27 },
+      high: { maxStep: 0.78, wobble: 0.17, rowTime: 0.27, bounce: 0.34 }
+    }[options.risk] || { maxStep: 0.66, wobble: 0.12, rowTime: 0.29, bounce: 0.27 };
     const clearance = metrics.pegRadius + metrics.ballRadius * 0.9;
     const pocketLeft = options.targetPocket * metrics.slotStep + metrics.ballRadius * 1.35;
     const pocketRight = (options.targetPocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35;
@@ -421,26 +429,50 @@
     let x = launchX;
     let time = 0;
 
+    if (rows.length) {
+      const firstRowY = rows[0].y;
+      const drift = (rng() - 0.5) * metrics.slotStep * 0.08;
+
+      time += 0.34;
+      trace.push({
+        x: launchX + drift * 0.25,
+        y: lerp(metrics.gateY, firstRowY, 0.24),
+        t: time
+      });
+      time += 0.42;
+      trace.push({
+        x: launchX + drift,
+        y: firstRowY - metrics.pegRadius * 3.4,
+        t: time
+      });
+      x = launchX + drift;
+    }
+
     rows.forEach(function (row, rowIndex) {
       const progress = (rowIndex + 1) / (rows.length + 1);
-      const steer = smoothstep(progress);
-      const wobble = (rng() - 0.5) * metrics.slotStep * profile.wobble * (1 - steer);
+      const steer = smoothstep(clamp(progress * 1.28, 0, 1));
+      const settlePull = smoothstep(clamp((progress - 0.56) / 0.32, 0, 1));
+      const wobble = (rng() - 0.5) * metrics.slotStep * profile.wobble * Math.max(0, 1 - steer * 1.2);
       const desiredX = lerp(launchX, targetX, steer) + wobble;
       const maxStep = metrics.slotStep * profile.maxStep;
       const guidedX = clamp(desiredX, x - maxStep, x + maxStep);
+      const impact = rowDeflection(row, x, guidedX, clearance);
       const hitX = clamp(
-        rowDeflectionX(row, guidedX, clearance),
+        impact.x,
         metrics.left + metrics.ballRadius,
         metrics.right - metrics.ballRadius
       );
       const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
-      const rowTime = profile.rowTime + rng() * 0.045;
+      const rowTime = (profile.rowTime + rng() * 0.07) * (rowIndex < 3 ? 1.35 : 1);
       const aboveY = row.y - metrics.pegRadius * 2.3;
       const exitY = row.y + metrics.pegRadius * 2.4;
+      const sameSideKick = impact.side * metrics.slotStep * profile.bounce * (1 - settlePull * 0.55);
+      const targetDrift = (targetX - boundedHitX) * (0.045 + settlePull * 0.28);
+      const exitDesiredX = boundedHitX + sameSideKick + targetDrift + (rng() - 0.5) * metrics.slotStep * 0.025;
       const exitX = clamp(
-        boundedHitX + (targetX - boundedHitX) * 0.08 + (rng() - 0.5) * metrics.slotStep * 0.06,
-        metrics.left + metrics.ballRadius,
-        metrics.right - metrics.ballRadius
+        exitDesiredX,
+        Math.max(metrics.left + metrics.ballRadius, x - maxStep * 0.95),
+        Math.min(metrics.right - metrics.ballRadius, x + maxStep * 0.95)
       );
 
       time += rowTime * 0.36;
@@ -452,27 +484,27 @@
       x = exitX;
     });
 
-    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.16, pocketLeft, pocketRight);
+    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.1, pocketLeft, pocketRight);
 
-    time += 0.22;
+    time += 0.42;
     trace.push({
-      x: lerp(x, chuteX, 0.7),
+      x: lerp(x, chuteX, 0.28),
       y: metrics.chuteTop - metrics.ballRadius * 1.5,
       t: time
     });
-    time += 0.18;
+    time += 0.38;
     trace.push({
-      x: chuteX,
+      x: lerp(x, chuteX, 0.58),
       y: metrics.chuteTop + metrics.ballRadius * 1.8,
       t: time
     });
-    time += 0.3;
+    time += 0.46;
     trace.push({
-      x: lerp(chuteX, targetX, 0.45),
+      x: lerp(chuteX, targetX, 0.55),
       y: lerp(metrics.chuteTop, metrics.slotY, 0.56),
       t: time
     });
-    time += 0.34;
+    time += 0.48;
     trace.push({
       x: targetX,
       y: metrics.slotY - metrics.ballRadius * 0.1,
@@ -765,7 +797,7 @@
     const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
       ? Number(resolved.multiplier)
       : stripSlots()[targetPocket];
-    const spawnDelay = total > 60 ? 55 : total > 30 ? 70 : total > 10 ? 90 : 150;
+    const spawnDelay = total > 60 ? 75 : total > 30 ? 95 : total > 10 ? 125 : 180;
     const trace = buildDropTrace({
       side,
       targetPocket,
@@ -777,7 +809,7 @@
       seed: randomSeed()
     });
     const start = trace[0];
-    const duration = Math.max(1900, trace[trace.length - 1].t * 1000);
+    const duration = Math.max(3900, trace[trace.length - 1].t * 1450);
 
     return {
       id: index,
