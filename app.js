@@ -6,7 +6,7 @@
   const TARGET_RTP = 0.925;
 
   const defaultConfig = {
-    appName: "Gamba Side Rush",
+    appName: "Gamba Plinko",
     network: "devnet",
     apiBaseUrl: "",
     liveTokenWagering: false,
@@ -45,6 +45,7 @@
     }
   };
 
+  const PLINKO_ROWS = 14;
   const HONEYCOMB_COLUMNS = 19;
   const TOP_ROW_EXTRA_EACH_SIDE = [0, 2, 2, 2, 1, 1];
   const WEIGHT_SCALE = 1000000;
@@ -329,41 +330,21 @@
 
   function pegRows(width, height) {
     const metrics = boardMetrics(width, height);
-    const fullColumns = HONEYCOMB_COLUMNS;
-    const fullGap = (metrics.pegRight - metrics.pegLeft) / (fullColumns - 1);
-    const rowGap = fullGap * Math.sqrt(3) / 2;
-    const availableHeight = metrics.playBottom - metrics.playTop;
-    let rowCount = Math.max(9, Math.floor(availableHeight / rowGap) + 1);
-    const topKeepRatio = 0.72;
-    const shoulderRows = 5;
-
-    if (rowCount % 2 === 0) {
-      rowCount -= 1;
-    }
-
-    const startY = metrics.playBottom - (rowCount - 1) * rowGap;
+    const rowCount = PLINKO_ROWS;
+    const rowGap = (metrics.playBottom - metrics.playTop) / Math.max(1, rowCount - 1);
     const rows = [];
 
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-      const isOffset = rowIndex % 2 === 1;
-      const baseCount = isOffset ? fullColumns - 1 : fullColumns;
-      const baseStart = metrics.pegLeft + (isOffset ? fullGap / 2 : 0);
-      const rowProgress = clamp(rowIndex / shoulderRows, 0, 1);
-      const keepRatio = lerp(topKeepRatio, 1, smoothstep(rowProgress));
-      const rowExtra = (TOP_ROW_EXTRA_EACH_SIDE[rowIndex] || 0) * 2;
-      const keepCount = Math.min(baseCount, Math.max(7, Math.round(baseCount * keepRatio) + rowExtra));
-      const parityAdjustedCount = keepCount % 2 === baseCount % 2 ? keepCount : keepCount + 1;
-      const count = Math.min(baseCount, parityAdjustedCount);
-      const trim = Math.floor((baseCount - count) / 2);
-      const start = baseStart + trim * fullGap;
+      const count = rowIndex + 1;
+      const start = metrics.centerX - (rowIndex * metrics.slotStep) / 2;
 
       rows.push({
         count,
         rowIndex,
-        y: startY + rowIndex * rowGap,
-        span: fullGap * (count - 1),
+        y: metrics.playTop + rowIndex * rowGap,
+        span: metrics.slotStep * (count - 1),
         start,
-        gap: fullGap
+        gap: metrics.slotStep
       });
     }
 
@@ -629,7 +610,117 @@
   }
 
   function buildDropTrace(options) {
-    return buildPlannedDropTrace(options);
+    return buildSpribePlinkoTrace(options);
+  }
+
+  function plinkoX(stepIndex, rights, metrics) {
+    return metrics.centerX + (rights - stepIndex / 2) * metrics.slotStep;
+  }
+
+  function shuffledPlinkoSteps(targetPocket, seed) {
+    const rng = seededRandom(seed);
+    const steps = [];
+
+    for (let index = 0; index < PLINKO_ROWS; index += 1) {
+      steps.push(index < targetPocket ? 1 : 0);
+    }
+
+    for (let index = steps.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(rng() * (index + 1));
+      const value = steps[index];
+      steps[index] = steps[swapIndex];
+      steps[swapIndex] = value;
+    }
+
+    return steps;
+  }
+
+  function buildSpribePlinkoTrace(options) {
+    const width = state.view.width;
+    const height = state.view.height;
+    const metrics = boardMetrics(width, height);
+    const rows = pegRows(width, height);
+    const targetPocket = clamp(Math.round(Number(options.targetPocket) || 0), 0, metrics.pocketCount - 1);
+    const steps = shuffledPlinkoSteps(targetPocket, options.seed);
+    const trace = [];
+    const rowTime = 0.34;
+    let rights = 0;
+    let time = 0;
+
+    trace.push({
+      x: metrics.centerX,
+      y: metrics.gateY + options.queueOffset,
+      t: time,
+      ease: "fall"
+    });
+
+    time += 0.3;
+    trace.push({
+      x: metrics.centerX,
+      y: rows[0].y - metrics.pegRadius * 4,
+      t: time,
+      ease: "fall"
+    });
+
+    rows.forEach(function (row, rowIndex) {
+      const currentX = plinkoX(rowIndex, rights, metrics);
+      const currentY = row.y;
+      const step = steps[rowIndex];
+      const nextRights = rights + step;
+      const nextX = plinkoX(rowIndex + 1, nextRights, metrics);
+      const exitX = lerp(currentX, nextX, 0.72);
+      const exitY = currentY + (rows[rowIndex + 1] ? rows[rowIndex + 1].y - currentY : metrics.chuteTop - currentY) * 0.44;
+
+      time += rowTime * 0.34;
+      trace.push({
+        x: currentX,
+        y: currentY - metrics.pegRadius * 2.2,
+        t: time,
+        ease: "fall"
+      });
+
+      time += rowTime * 0.2;
+      trace.push({
+        x: currentX,
+        y: currentY,
+        t: time,
+        ease: "fall"
+      });
+
+      time += rowTime * 0.46;
+      trace.push({
+        x: exitX,
+        y: exitY,
+        t: time,
+        ease: "bounce"
+      });
+
+      rights = nextRights;
+    });
+
+    const targetX = slotCenterX(targetPocket, metrics);
+
+    time += 0.32;
+    trace.push({
+      x: targetX,
+      y: metrics.chuteTop - metrics.ballRadius * 1.4,
+      t: time,
+      ease: "fall"
+    });
+
+    time += 0.28;
+    trace.push({
+      x: targetX,
+      y: metrics.slotY - metrics.ballRadius * 0.1,
+      t: time,
+      ease: "fall"
+    });
+
+    trace.durationMs = trace[trace.length - 1].t * 1000;
+    trace.settlePocket = targetPocket;
+    trace.settleX = targetX;
+
+    return trace;
   }
 
   function createLiveMatterPhysics(width, height, risk) {
@@ -1132,11 +1223,11 @@
 
   function drawLaunchGates(width, height) {
     const metrics = boardMetrics(width, height);
-    const gateWidth = clamp(width * 0.052, 38, 54);
+    const gateWidth = clamp(width * 0.07, 58, 76);
     const gateHeight = clamp(height * 0.07, 30, 42);
-    const bandX = width * 0.31;
+    const bandX = width * 0.39;
     const bandY = metrics.gateY - gateHeight * 0.95;
-    const bandWidth = width * 0.38;
+    const bandWidth = width * 0.22;
     const bandHeight = gateHeight * 1.9;
 
     ctx.save();
@@ -1145,9 +1236,7 @@
     ctx.fill();
     ctx.strokeStyle = "rgba(244,239,227,0.1)";
     ctx.stroke();
-    drawGate(launchXForSide("left", metrics), metrics.gateY, "L", gateWidth, gateHeight, state.selectedSides.indexOf("left") !== -1);
-    drawGate(metrics.centerX, metrics.gateY, "C", gateWidth, gateHeight, state.selectedSides.indexOf("center") !== -1);
-    drawGate(launchXForSide("right", metrics), metrics.gateY, "R", gateWidth, gateHeight, state.selectedSides.indexOf("right") !== -1);
+    drawGate(metrics.centerX, metrics.gateY, "DROP", gateWidth, gateHeight, true);
     ctx.restore();
   }
 
@@ -1160,7 +1249,7 @@
     ctx.strokeStyle = active ? "rgba(71,199,143,0.6)" : "rgba(244,239,227,0.18)";
     ctx.stroke();
     ctx.fillStyle = active ? "#47c78f" : "#f4efe3";
-    ctx.font = "800 13px system-ui, sans-serif";
+    ctx.font = "800 12px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, 0, 0);
@@ -1248,8 +1337,9 @@
 
   function drawQueuedBall(ball, width, height) {
     const metrics = boardMetrics(width, height);
-    const x = ball.matterLaunch ? ball.matterLaunch.x : launchXForSide(ball.side, metrics);
-    const y = ball.matterLaunch ? ball.matterLaunch.y : metrics.gateY + ball.queueOffset;
+    const firstPoint = ball.trace && ball.trace[0] ? ball.trace[0] : null;
+    const x = firstPoint ? firstPoint.x : launchXForSide(ball.side, metrics);
+    const y = firstPoint ? firstPoint.y : metrics.gateY + ball.queueOffset;
 
     ctx.save();
     ctx.globalAlpha = 0.25;
@@ -1321,12 +1411,8 @@
       risk: state.risk,
       seed: randomSeed()
     };
-    const canUseLiveMatter = matterReady();
-    const matterLaunch = canUseLiveMatter
-      ? matterCandidate(index, seededRandom(traceOptions.seed), traceOptions, metrics)
-      : null;
-    const trace = canUseLiveMatter ? null : buildDropTrace(traceOptions);
-    const start = canUseLiveMatter ? matterLaunch : trace[0];
+    const trace = buildDropTrace(traceOptions);
+    const start = trace[0];
     const displayPocket = targetPocket;
     const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
       ? Number(resolved.multiplier)
@@ -1359,9 +1445,9 @@
         ? roundMoney(Number(resolved.payout))
         : roundMoney(wager * multiplier),
       lockedPayout: true,
-      matterLaunch,
+      matterLaunch: null,
       driftTargetX: slotCenterX(displayPocket, metrics),
-      driftSeed: matterLaunch ? matterLaunch.driftSeed : randomSeed(),
+      driftSeed: randomSeed(),
       driftStrength: resolved ? 0.24 : 0.14,
       trail: []
     };
@@ -1545,7 +1631,7 @@
       totalWager,
       startedAt: now,
       lastTime: null,
-      physics: matterReady() ? createLiveMatterPhysics(state.view.width, state.view.height, state.risk) : null
+      physics: null
     };
 
     playButton.disabled = true;
@@ -1556,14 +1642,7 @@
   }
 
   function sideLabelForBalls(balls) {
-    const sides = balls.reduce(function (set, ball) {
-      if (set.indexOf(ball.side) === -1) {
-        set.push(ball.side);
-      }
-      return set;
-    }, []);
-
-    return sides.length > 1 ? "mixed" : sides[0];
+    return "plinko";
   }
 
   function finishRound() {
@@ -1684,7 +1763,7 @@
       totalWager,
       startedAt: now,
       lastTime: null,
-      physics: matterReady() ? createLiveMatterPhysics(state.view.width, state.view.height, result.risk || state.risk) : null,
+      physics: null,
       live: true,
       paymentSignature: result.paymentSignature,
       payoutSignature

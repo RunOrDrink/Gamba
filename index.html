@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Gamba Side Rush</title>
-    <link rel="stylesheet" href="styles.css?v=20260620-21">
+    <title>Gamba Plinko</title>
+    <link rel="stylesheet" href="styles.css?v=20260620-24">
   </head>
   <body>
     <main class="game-shell">
@@ -65,7 +65,7 @@
           </div>
         </div>
 
-        <div class="field">
+        <div class="field side-field">
           <span class="field-label">Side</span>
           <div class="segmented" role="group" aria-label="Launch side">
             <button type="button" data-side="left" class="is-active">Left</button>
@@ -101,7 +101,7 @@
         </button>
       </section>
 
-      <section class="arena" aria-label="Side rush board">
+      <section class="arena" aria-label="Plinko board">
         <div class="arena-bar">
           <div class="round-readout" aria-live="polite">
             <span>Last</span>
@@ -138,8 +138,7 @@
     </main>
 
     <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
-    <script src="https://unpkg.com/matter-js@0.20.0/build/matter.min.js"></script>
-    <script src="config.js?v=20260620-21"></script>
-    <script src="app.js?v=20260620-21"></script>
+    <script src="config.js?v=20260620-24"></script>
+    <script src="app.js?v=20260620-24"></script>
   </body>
 </html>
