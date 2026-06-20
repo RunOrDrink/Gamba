@@ -46,13 +46,11 @@
   };
 
   const physicsByRisk = {
-    low: { spread: 0.05, restitution: 0.76, drag: 0.997, pegKick: 9 },
-    medium: { spread: 0.08, restitution: 0.84, drag: 0.998, pegKick: 15 },
-    high: { spread: 0.12, restitution: 0.91, drag: 0.999, pegKick: 22 }
+    low: { spread: 0.04, restitution: 0.42, drag: 0.996, pegKick: 4 },
+    medium: { spread: 0.06, restitution: 0.5, drag: 0.997, pegKick: 6 },
+    high: { spread: 0.09, restitution: 0.58, drag: 0.998, pegKick: 8 }
   };
-  const PEG_ROW_COUNTS = [9, 11, 13, 15, 17, 19, 17, 15, 13, 11, 9];
-  const PEG_ROW_STAGGERS = [-0.35, -0.2, -0.05, 0.1, 0.25, 0.38, -0.32, -0.17, -0.02, 0.13, 0.28];
-  const PEG_POINT_JITTERS = [-0.12, 0.06, -0.04, 0.11, -0.08, 0.03, 0.13, -0.1, 0.02, -0.14, 0.09, -0.02];
+  const HONEYCOMB_COLUMNS = 25;
 
   const state = {
     balance: STARTING_BALANCE,
@@ -283,15 +281,15 @@
       right: width * 0.975,
       top: height * 0.06,
       gateY: height * 0.09,
-      playTop: height * 0.19,
-      playBottom: height * 0.815,
-      chuteTop: height * 0.865,
-      slotY: height * 0.935,
+      playTop: height * 0.17,
+      playBottom: height * 0.795,
+      chuteTop: height * 0.825,
+      slotY: height * 0.968,
       centerX: width * 0.5,
-      pegLeft: width * 0.1,
-      pegRight: width * 0.9,
-      ballRadius: clamp(minSide * 0.0115, 4.5, 7),
-      pegRadius: clamp(minSide * 0.0085, 3.8, 5.8),
+      pegLeft: slotStep * 0.5,
+      pegRight: width - slotStep * 0.5,
+      ballRadius: clamp(minSide * 0.0105, 4.2, 6.2),
+      pegRadius: clamp(minSide * 0.0068, 3, 4.8),
       pocketCount,
       slotStep,
       slotLeft: slotStep * 0.5
@@ -304,29 +302,35 @@
 
   function pegRows(width, height) {
     const metrics = boardMetrics(width, height);
+    const fullColumns = HONEYCOMB_COLUMNS;
+    const fullGap = (metrics.pegRight - metrics.pegLeft) / (fullColumns - 1);
+    const rowGap = fullGap * Math.sqrt(3) / 2;
+    const availableHeight = metrics.playBottom - metrics.playTop;
+    let rowCount = Math.max(9, Math.floor(availableHeight / rowGap) + 1);
 
-    return PEG_ROW_COUNTS.map(function (count, rowIndex) {
-      const y = lerp(metrics.playTop, metrics.playBottom, rowIndex / (PEG_ROW_COUNTS.length - 1));
-      const fullSpan = metrics.pegRight - metrics.pegLeft;
-      const maxRowCount = Math.max.apply(null, PEG_ROW_COUNTS);
-      const span = fullSpan * (count - 1) / (maxRowCount - 1);
-      const gap = count > 1 ? span / (count - 1) : 0;
-      const shiftedStart = metrics.centerX - span / 2 + gap * PEG_ROW_STAGGERS[rowIndex % PEG_ROW_STAGGERS.length];
-      const start = clamp(
-        shiftedStart,
-        metrics.left + metrics.pegRadius,
-        metrics.right - metrics.pegRadius - span
-      );
+    if (rowCount % 2 === 0) {
+      rowCount -= 1;
+    }
 
-      return {
+    const startY = metrics.playBottom - (rowCount - 1) * rowGap;
+    const rows = [];
+
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const isOffset = rowIndex % 2 === 1;
+      const count = isOffset ? fullColumns - 1 : fullColumns;
+      const start = metrics.pegLeft + (isOffset ? fullGap / 2 : 0);
+
+      rows.push({
         count,
         rowIndex,
-        y,
-        span,
+        y: startY + rowIndex * rowGap,
+        span: fullGap * (count - 1),
         start,
-        gap
-      };
-    });
+        gap: fullGap
+      });
+    }
+
+    return rows;
   }
 
   function createPegs(width, height) {
@@ -335,9 +339,8 @@
 
     pegRows(width, height).forEach(function (row) {
       for (let index = 0; index < row.count; index += 1) {
-        const jitter = row.gap * PEG_POINT_JITTERS[(row.rowIndex * 5 + index * 3) % PEG_POINT_JITTERS.length];
         pegs.push({
-          x: clamp(row.start + row.gap * index + jitter, metrics.left + metrics.pegRadius, metrics.right - metrics.pegRadius),
+          x: row.start + row.gap * index,
           y: row.y,
           r: metrics.pegRadius
         });
@@ -390,12 +393,12 @@
     const ball = {
       x: launchX,
       y: metrics.gateY + options.queueOffset + options.verticalJitter,
-      vx: (targetX - launchX) * 0.58 + scan * width * (0.13 + band * 0.035) + (rng() - 0.5) * width * 0.07,
-      vy: height * (0.055 + rng() * 0.04),
+      vx: (targetX - launchX) * 0.42 + scan * width * (0.09 + band * 0.025) + (rng() - 0.5) * width * 0.04,
+      vy: height * (0.035 + rng() * 0.03),
       r: metrics.ballRadius,
       chutePocket: null
     };
-    const gravity = height * 1.02;
+    const gravity = height * 0.82;
     const dt = 1 / 90;
     const trace = [{ x: ball.x, y: ball.y, t: 0 }];
     let settledPocket = 7;
@@ -452,8 +455,10 @@
         }
 
         ball.vx += ny * (rng() - 0.5) * risk.pegKick;
-        ball.vx += ((pegIndex % 2 === 0) ? 1 : -1) * risk.pegKick * 0.12;
-        ball.vy -= Math.abs(nx) * risk.pegKick * 0.2;
+        ball.vx += ((pegIndex % 2 === 0) ? 1 : -1) * risk.pegKick * 0.05;
+        ball.vy -= Math.abs(nx) * risk.pegKick * 0.04;
+        ball.vx *= 0.98;
+        ball.vy *= 0.96;
       });
 
       if (ball.y >= metrics.chuteTop && ball.chutePocket === null) {
@@ -634,38 +639,9 @@
     ctx.fillRect(0, 0, width, height);
 
     drawLaunchGates(width, height);
-    drawPegFrame(width, height);
     drawPegs(width, height);
     drawSlotWalls(width, height);
     drawBalls(width, height);
-  }
-
-  function drawPegFrame(width, height) {
-    const metrics = boardMetrics(width, height);
-    const rows = pegRows(width, height);
-    const top = rows[0];
-    const widest = rows.reduce(function (best, row) {
-      return row.span > best.span ? row : best;
-    }, rows[0]);
-    const bottom = rows[rows.length - 1];
-    const padX = metrics.slotStep * 0.38;
-    const padY = metrics.ballRadius * 2.3;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(top.start - padX, top.y - padY);
-    ctx.lineTo(top.start + top.span + padX, top.y - padY);
-    ctx.lineTo(widest.start + widest.span + padX, widest.y);
-    ctx.lineTo(bottom.start + bottom.span + padX, bottom.y + padY);
-    ctx.lineTo(bottom.start - padX, bottom.y + padY);
-    ctx.lineTo(widest.start - padX, widest.y);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(244,239,227,0.018)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(244,239,227,0.08)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
   }
 
   function drawLaunchGates(width, height) {
@@ -733,7 +709,7 @@
   function drawSlotWalls(width, height) {
     const metrics = boardMetrics(width, height);
     const wallWidth = clamp(metrics.slotStep * 0.055, 3, 6);
-    const floorY = metrics.slotY + metrics.ballRadius * 1.1;
+    const floorY = height;
 
     ctx.save();
     ctx.fillStyle = "rgba(244,239,227,0.035)";
@@ -742,7 +718,7 @@
     ctx.lineWidth = wallWidth;
     ctx.lineCap = "round";
 
-    for (let index = 1; index < metrics.pocketCount; index += 1) {
+    for (let index = 0; index <= metrics.pocketCount; index += 1) {
       const x = metrics.slotStep * index;
       ctx.beginPath();
       ctx.moveTo(x, metrics.chuteTop);
@@ -861,7 +837,7 @@
       seed: randomSeed()
     });
     const start = trace[0];
-    const duration = Math.max(1150, trace[trace.length - 1].t * 1450);
+    const duration = Math.max(1800, trace[trace.length - 1].t * 2400);
 
     return {
       id: index,
