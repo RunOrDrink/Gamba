@@ -48,7 +48,7 @@ function weightedTier(weights, entropyHex) {
 
   for (let index = 0; index < weights.length; index += 1) {
     roll -= Math.round(weights[index] * 1_000_000);
-    if (roll <= 0) {
+    if (roll < 0) {
       return index;
     }
   }

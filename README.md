@@ -1,4 +1,4 @@
-# Gamba Side Rush
+# Gamba Plinko
 
 Static prototype plus the starting scaffold for wagering with a Solana SPL token launched through Pump.fun.
 

@@ -3,7 +3,8 @@
 
   const STARTING_BALANCE = 1000;
   const MAX_BALLS = 100;
-  const TARGET_RTP = 0.925;
+  const PLINKO_ROWS = 14;
+  const WEIGHT_SCALE = 1000000;
 
   const defaultConfig = {
     appName: "Gamba Plinko",
@@ -18,17 +19,6 @@
       treasuryAddress: ""
     }
   };
-
-  const config = Object.assign({}, defaultConfig, window.GAMBA_CONFIG || {});
-  config.token = Object.assign({}, defaultConfig.token, (window.GAMBA_CONFIG || {}).token || {});
-
-  const TOKEN_SYMBOL = config.token.symbol || "GAMBA";
-  const liveReady = Boolean(
-    config.liveTokenWagering &&
-    config.apiBaseUrl &&
-    config.token.mintAddress &&
-    config.token.treasuryAddress
-  );
 
   const riskConfigs = {
     low: {
@@ -45,26 +35,28 @@
     }
   };
 
-  const PLINKO_ROWS = 14;
-  const HONEYCOMB_COLUMNS = 19;
-  const TOP_ROW_EXTRA_EACH_SIDE = [0, 2, 2, 2, 1, 1];
-  const WEIGHT_SCALE = 1000000;
-  const MATTER_STATIC_CATEGORY = 0x0001;
-  const MATTER_BALL_CATEGORY = 0x0002;
+  const config = Object.assign({}, defaultConfig, window.GAMBA_CONFIG || {});
+  config.token = Object.assign({}, defaultConfig.token, (window.GAMBA_CONFIG || {}).token || {});
+
+  const TOKEN_SYMBOL = config.token.symbol || "GAMBA";
+  const liveReady = Boolean(
+    config.liveTokenWagering &&
+    config.apiBaseUrl &&
+    config.token.mintAddress &&
+    config.token.treasuryAddress
+  );
 
   const state = {
     balance: STARTING_BALANCE,
     liveBalance: null,
     profit: 0,
     risk: "medium",
-    selectedSides: ["left", "center", "right"],
     mode: "demo",
     ballCount: 1,
     playing: false,
     lastPockets: [],
     history: [],
     animation: null,
-    restingBalls: [],
     wallet: {
       provider: null,
       publicKey: "",
@@ -101,7 +93,6 @@
   const multiplierStrip = document.getElementById("multiplierStrip");
   const historyList = document.getElementById("historyList");
   const roundCount = document.getElementById("roundCount");
-  const sideButtons = Array.from(document.querySelectorAll("[data-side]"));
   const riskButtons = Array.from(document.querySelectorAll("[data-risk]"));
   const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
 
@@ -117,6 +108,10 @@
     return money(value) + " " + TOKEN_SYMBOL;
   }
 
+  function multiplierLabel(value) {
+    return Number.isInteger(value) ? value + "x" : value.toFixed(2).replace(/0$/, "") + "x";
+  }
+
   function shortAddress(address) {
     if (!address) {
       return "Unset";
@@ -125,12 +120,12 @@
     return address.length > 12 ? address.slice(0, 4) + "..." + address.slice(-4) : address;
   }
 
-  function multiplierLabel(value) {
-    return Number.isInteger(value) ? value + "x" : value.toFixed(2).replace(/0$/, "") + "x";
-  }
-
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
   }
 
   function secureRandom() {
@@ -143,21 +138,26 @@
     return Math.random();
   }
 
-  function lerp(a, b, t) {
-    return a + (b - a) * t;
+  function randomSeed() {
+    return Math.floor(secureRandom() * 4294967295) >>> 0;
   }
 
-  function smoothstep(t) {
-    return t * t * (3 - 2 * t);
+  function seededRandom(seed) {
+    let value = seed >>> 0;
+
+    return function () {
+      value = (value * 1664525 + 1013904223) >>> 0;
+      return value / 4294967296;
+    };
   }
 
-  function traceEase(kind, t) {
-    if (kind === "fall") {
-      return t;
-    }
-
+  function ease(kind, t) {
     if (kind === "bounce") {
       return 1 - Math.pow(1 - t, 2);
+    }
+
+    if (kind === "settle") {
+      return t * t * (3 - 2 * t);
     }
 
     return t;
@@ -165,20 +165,12 @@
 
   function selectedWager() {
     const value = Number(wagerInput.value);
-    if (!Number.isFinite(value)) {
-      return 0;
-    }
-
-    return Math.floor(value);
+    return Number.isFinite(value) ? Math.floor(value) : 0;
   }
 
   function selectedBallCount() {
     const value = Number(ballCountInput.value);
-    if (!Number.isFinite(value)) {
-      return 1;
-    }
-
-    return clamp(Math.round(value), 1, MAX_BALLS);
+    return clamp(Math.round(Number.isFinite(value) ? value : 1), 1, MAX_BALLS);
   }
 
   function configuredBalance() {
@@ -186,11 +178,188 @@
   }
 
   function maxWholeWagerPerBall(balance, balls) {
-    if (!Number.isFinite(balance)) {
-      return 0;
+    return Math.floor(Math.max(0, Number(balance) || 0) / Math.max(1, balls));
+  }
+
+  function activeMultipliers() {
+    return riskConfigs[state.risk].multipliers;
+  }
+
+  function activeWeights() {
+    return riskConfigs[state.risk].weights;
+  }
+
+  function stripSlots() {
+    const multipliers = activeMultipliers();
+    return multipliers.concat(multipliers.slice(0, -1).reverse());
+  }
+
+  function expectedRtpForRisk(risk) {
+    const riskConfig = riskConfigs[risk];
+    return riskConfig.weights.reduce(function (sum, weight, index) {
+      return sum + weight * riskConfig.multipliers[index];
+    }, 0);
+  }
+
+  function weightedTier(weights) {
+    const scaled = weights.map(function (weight) {
+      return Math.round(weight * WEIGHT_SCALE);
+    });
+    const total = scaled.reduce(function (sum, weight) {
+      return sum + weight;
+    }, 0);
+    let roll = Math.floor(secureRandom() * total);
+
+    for (let index = 0; index < scaled.length; index += 1) {
+      roll -= scaled[index];
+      if (roll < 0) {
+        return index;
+      }
     }
 
-    return Math.floor(Math.max(0, balance) / Math.max(1, balls));
+    return scaled.length - 1;
+  }
+
+  function targetPocketFromTier(tier) {
+    if (tier === 7) {
+      return 7;
+    }
+
+    return secureRandom() >= 0.5 ? tier : 14 - tier;
+  }
+
+  function boardMetrics(width, height) {
+    const minSide = Math.min(width, height);
+    const pocketCount = 15;
+    const slotStep = width / pocketCount;
+
+    return {
+      width,
+      height,
+      pocketCount,
+      slotStep,
+      slotLeft: slotStep * 0.5,
+      centerX: width * 0.5,
+      gateY: height * 0.075,
+      playTop: height * 0.16,
+      playBottom: height * 0.79,
+      chuteTop: height * 0.855,
+      slotY: height * 0.945,
+      ballRadius: clamp(minSide * 0.011, 4.8, 6.8),
+      pegRadius: clamp(minSide * 0.0068, 3.2, 5),
+      pegGlow: clamp(minSide * 0.026, 14, 24)
+    };
+  }
+
+  function slotCenterX(index, metrics) {
+    return metrics.slotLeft + metrics.slotStep * index;
+  }
+
+  function plinkoX(stepIndex, rights, metrics) {
+    return metrics.centerX + (rights - stepIndex / 2) * metrics.slotStep;
+  }
+
+  function pegRows(width, height) {
+    const metrics = boardMetrics(width, height);
+    const rowGap = (metrics.playBottom - metrics.playTop) / Math.max(1, PLINKO_ROWS - 1);
+    const rows = [];
+
+    for (let rowIndex = 0; rowIndex < PLINKO_ROWS; rowIndex += 1) {
+      const count = rowIndex + 1;
+      const start = metrics.centerX - (rowIndex * metrics.slotStep) / 2;
+
+      rows.push({
+        rowIndex,
+        count,
+        start,
+        gap: metrics.slotStep,
+        y: metrics.playTop + rowIndex * rowGap
+      });
+    }
+
+    return rows;
+  }
+
+  function createPegs(width, height) {
+    const metrics = boardMetrics(width, height);
+    const pegs = [];
+
+    pegRows(width, height).forEach(function (row) {
+      for (let index = 0; index < row.count; index += 1) {
+        pegs.push({
+          x: row.start + index * row.gap,
+          y: row.y,
+          r: metrics.pegRadius,
+          rowIndex: row.rowIndex
+        });
+      }
+    });
+
+    return pegs;
+  }
+
+  function shuffledSteps(targetPocket, seed) {
+    const rng = seededRandom(seed);
+    const steps = [];
+
+    for (let index = 0; index < PLINKO_ROWS; index += 1) {
+      steps.push(index < targetPocket ? 1 : 0);
+    }
+
+    for (let index = steps.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(rng() * (index + 1));
+      const value = steps[index];
+      steps[index] = steps[swapIndex];
+      steps[swapIndex] = value;
+    }
+
+    return steps;
+  }
+
+  function buildPlinkoTrace(targetPocket, seed) {
+    const metrics = boardMetrics(state.view.width, state.view.height);
+    const rows = pegRows(state.view.width, state.view.height);
+    const pocket = clamp(Math.round(targetPocket), 0, metrics.pocketCount - 1);
+    const steps = shuffledSteps(pocket, seed);
+    const trace = [];
+    const rowTime = 0.34;
+    let rights = 0;
+    let time = 0;
+
+    trace.push({ x: metrics.centerX, y: metrics.gateY, t: time, ease: "fall" });
+    time += 0.32;
+    trace.push({ x: metrics.centerX, y: rows[0].y - metrics.pegRadius * 4, t: time, ease: "fall" });
+
+    rows.forEach(function (row, rowIndex) {
+      const hitX = plinkoX(rowIndex, rights, metrics);
+      const hitY = row.y;
+      const nextRights = rights + steps[rowIndex];
+      const nextX = plinkoX(rowIndex + 1, nextRights, metrics);
+      const nextY = rows[rowIndex + 1] ? rows[rowIndex + 1].y : metrics.chuteTop;
+      const exitX = lerp(hitX, nextX, 0.7);
+      const exitY = lerp(hitY, nextY, 0.45);
+
+      time += rowTime * 0.3;
+      trace.push({ x: hitX, y: hitY - metrics.pegRadius * 2.15, t: time, ease: "fall" });
+      time += rowTime * 0.22;
+      trace.push({ x: hitX, y: hitY, t: time, ease: "fall", hitRow: rowIndex });
+      time += rowTime * 0.48;
+      trace.push({ x: exitX, y: exitY, t: time, ease: "bounce" });
+
+      rights = nextRights;
+    });
+
+    const targetX = slotCenterX(pocket, metrics);
+    time += 0.3;
+    trace.push({ x: targetX, y: metrics.chuteTop - metrics.ballRadius * 1.35, t: time, ease: "fall" });
+    time += 0.3;
+    trace.push({ x: targetX, y: metrics.slotY - metrics.ballRadius * 0.1, t: time, ease: "settle" });
+
+    trace.durationMs = trace[trace.length - 1].t * 1000;
+    trace.settleX = targetX;
+    trace.settlePocket = pocket;
+
+    return trace;
   }
 
   function findSolanaWallet() {
@@ -221,9 +390,7 @@
       state.wallet.connected = Boolean(state.wallet.publicKey);
       walletStatusEl.textContent = shortAddress(state.wallet.publicKey);
       connectWalletButton.querySelector("span").textContent = "Wallet connected";
-      if (state.mode === "live") {
-        lastResultEl.textContent = liveReady ? "Token mode ready" : "Token config needed";
-      }
+      lastResultEl.textContent = state.mode === "live" ? liveReady ? "Token mode ready" : "Token config needed" : "Ready";
     } catch (error) {
       walletStatusEl.textContent = "Rejected";
       lastResultEl.textContent = "Wallet rejected";
@@ -239,903 +406,49 @@
     modeButtons.forEach(function (button) {
       button.classList.toggle("is-active", button.dataset.mode === mode);
     });
-
-    lastResultEl.textContent = mode === "live"
-      ? liveReady ? "Token mode ready" : "Token config needed"
-      : "Ready";
+    lastResultEl.textContent = mode === "live" ? liveReady ? "Token mode ready" : "Token config needed" : "Ready";
     updateDisplay();
   }
 
-  function activeMultipliers() {
-    return riskConfigs[state.risk].multipliers;
-  }
-
-  function activeWeights() {
-    return riskConfigs[state.risk].weights;
-  }
-
-  function stripSlots() {
-    const multipliers = activeMultipliers();
-    return multipliers.concat(multipliers.slice(0, -1).reverse());
-  }
-
-  function weightedTier(weights) {
-    const scaledWeights = weights.map(function (weight) {
-      return Math.round(weight * WEIGHT_SCALE);
-    });
-    const total = scaledWeights.reduce(function (sum, weight) {
-      return sum + weight;
-    }, 0);
-    let roll = Math.floor(secureRandom() * total);
-
-    for (let index = 0; index < scaledWeights.length; index += 1) {
-      roll -= scaledWeights[index];
-      if (roll <= 0) {
-        return index;
-      }
-    }
-
-    return scaledWeights.length - 1;
-  }
-
-  function expectedRtpForRisk(risk) {
-    const riskConfig = riskConfigs[risk];
-    return riskConfig.weights.reduce(function (sum, weight, index) {
-      return sum + weight * riskConfig.multipliers[index];
-    }, 0);
-  }
-
-  function targetPocketFromTier(tier) {
-    if (tier === 7) {
-      return 7;
-    }
-
-    return secureRandom() >= 0.5 ? tier : 14 - tier;
-  }
-
-  function boardMetrics(width, height) {
-    const minSide = Math.min(width, height);
-    const pocketCount = 15;
-    const slotStep = width / pocketCount;
-    const slotY = height - clamp(height * 0.014, 8, 12);
-    const chuteHeight = clamp(height * 0.032, 22, 36);
-    const chuteTop = slotY - chuteHeight;
-    const playBottom = chuteTop - clamp(height * 0.032, 20, 32);
-
-    return {
-      width,
-      height,
-      left: width * 0.025,
-      right: width * 0.975,
-      top: height * 0.06,
-      gateY: height * 0.09,
-      playTop: height * 0.17,
-      playBottom,
-      chuteTop,
-      slotY,
-      centerX: width * 0.5,
-      pegLeft: slotStep * 0.5,
-      pegRight: width - slotStep * 0.5,
-      ballRadius: clamp(minSide * 0.0105, 4.2, 6.2),
-      pegRadius: clamp(minSide * 0.0068, 3, 4.8),
-      pocketCount,
-      slotStep,
-      slotLeft: slotStep * 0.5
-    };
-  }
-
-  function slotCenterX(index, metrics) {
-    return metrics.slotLeft + metrics.slotStep * index;
-  }
-
-  function pegRows(width, height) {
-    const metrics = boardMetrics(width, height);
-    const rowCount = PLINKO_ROWS;
-    const rowGap = (metrics.playBottom - metrics.playTop) / Math.max(1, rowCount - 1);
-    const rows = [];
-
-    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-      const count = rowIndex + 1;
-      const start = metrics.centerX - (rowIndex * metrics.slotStep) / 2;
-
-      rows.push({
-        count,
-        rowIndex,
-        y: metrics.playTop + rowIndex * rowGap,
-        span: metrics.slotStep * (count - 1),
-        start,
-        gap: metrics.slotStep
-      });
-    }
-
-    return rows;
-  }
-
-  function createPegs(width, height) {
-    const metrics = boardMetrics(width, height);
-    const pegs = [];
-
-    pegRows(width, height).forEach(function (row) {
-      for (let index = 0; index < row.count; index += 1) {
-        pegs.push({
-          x: row.start + row.gap * index,
-          y: row.y,
-          r: metrics.pegRadius
-        });
-      }
-    });
-
-    return pegs;
-  }
-
-  function launchXForSide(side, metrics) {
-    if (side === "left") {
-      return metrics.width * 0.37;
-    }
-
-    if (side === "right") {
-      return metrics.width * 0.63;
-    }
-
-    return metrics.centerX;
-  }
-
-  function seededRandom(seed) {
-    let value = seed >>> 0;
-
-    return function () {
-      value = (value * 1664525 + 1013904223) >>> 0;
-      return value / 4294967296;
-    };
-  }
-
-  function randomSeed() {
-    return Math.floor(secureRandom() * 4294967295) >>> 0;
-  }
-
-  function pocketFromX(x, metrics) {
-    return clamp(Math.floor(x / metrics.slotStep), 0, metrics.pocketCount - 1);
-  }
-
-  function rowDeflection(row, incomingX, side, clearance) {
-    const pegIndex = clamp(Math.round((incomingX - side * clearance * 0.7 - row.start) / row.gap), 0, row.count - 1);
-    const pegX = row.start + row.gap * pegIndex;
-
-    return {
-      x: pegX + side * clearance,
-      pegX,
-      side
-    };
-  }
-
-  function matterReady() {
-    return Boolean(
-      window.Matter &&
-      window.Matter.Engine &&
-      window.Matter.Bodies &&
-      window.Matter.Body &&
-      window.Matter.Composite
-    );
-  }
-
-  function matterProfile(risk) {
-    if (risk === "low") {
-      return { restitution: 0.78, pegRestitution: 0.86, friction: 0.004, frictionAir: 0.0042, gravityScale: 0.00092 };
-    }
-
-    if (risk === "high") {
-      return { restitution: 0.88, pegRestitution: 0.95, friction: 0.002, frictionAir: 0.0032, gravityScale: 0.00102 };
-    }
-
-    return { restitution: 0.83, pegRestitution: 0.91, friction: 0.003, frictionAir: 0.0037, gravityScale: 0.00097 };
-  }
-
-  function matterStaticOptions(profile) {
-    return {
-      isStatic: true,
-      label: "static",
-      restitution: profile.pegRestitution,
-      friction: 0.01,
-      frictionStatic: 0,
-      collisionFilter: {
-        category: MATTER_STATIC_CATEGORY,
-        mask: MATTER_BALL_CATEGORY
-      }
-    };
-  }
-
-  function createMatterEngine(metrics, profile) {
-    const Matter = window.Matter;
-    const engine = Matter.Engine.create({
-      enableSleeping: false
-    });
-    const staticOptions = matterStaticOptions(profile);
-    const wallWidth = clamp(metrics.slotStep * 0.035, 2, 4);
-    const floorY = metrics.slotY + metrics.ballRadius * 1.1;
-    const chuteHeight = Math.max(metrics.ballRadius * 3, floorY - metrics.chuteTop);
-    const wallOptions = Object.assign({}, staticOptions, { label: "wall", restitution: 0.42 });
-    const pegOptions = Object.assign({}, staticOptions, { label: "peg" });
-    const railTop = metrics.playTop + metrics.ballRadius * 2;
-    const railBottom = metrics.chuteTop;
-    const railHeight = railBottom - railTop;
-    const walls = [
-      Matter.Bodies.rectangle(metrics.width / 2, floorY + wallWidth / 2, metrics.width + wallWidth * 2, wallWidth, wallOptions),
-      Matter.Bodies.rectangle(metrics.pegLeft - metrics.slotStep * 0.4, railTop + railHeight / 2, wallWidth * 2, railHeight, wallOptions),
-      Matter.Bodies.rectangle(metrics.pegRight + metrics.slotStep * 0.4, railTop + railHeight / 2, wallWidth * 2, railHeight, wallOptions),
-      Matter.Bodies.rectangle(-wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, wallOptions),
-      Matter.Bodies.rectangle(metrics.width + wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, wallOptions)
-    ];
-
-    engine.gravity.x = 0;
-    engine.gravity.y = 1;
-    engine.gravity.scale = profile.gravityScale;
-    engine.positionIterations = 10;
-    engine.velocityIterations = 10;
-    engine.constraintIterations = 2;
-
-    createPegs(metrics.width, metrics.height).forEach(function (peg) {
-      walls.push(Matter.Bodies.circle(peg.x, peg.y, peg.r, pegOptions));
-    });
-
-    for (let index = 0; index <= metrics.pocketCount; index += 1) {
-      const x = metrics.slotStep * index;
-      walls.push(Matter.Bodies.rectangle(
-        x,
-        metrics.chuteTop + chuteHeight / 2,
-        wallWidth,
-        chuteHeight,
-        wallOptions
-      ));
-    }
-
-    Matter.Composite.add(engine.world, walls);
-    return engine;
-  }
-
-  function runMatterCandidate(options, metrics, profile, candidate, captureTrace) {
-    const Matter = window.Matter;
-    const engine = createMatterEngine(metrics, profile);
-    const ball = Matter.Bodies.circle(candidate.x, candidate.y, metrics.ballRadius, {
-      restitution: profile.restitution,
-      friction: profile.friction,
-      frictionStatic: 0,
-      frictionAir: profile.frictionAir,
-      density: 0.001,
-      collisionFilter: {
-        category: MATTER_BALL_CATEGORY,
-        mask: MATTER_STATIC_CATEGORY
-      }
-    });
-    const stepMs = 1000 / 60;
-    const maxSteps = 420;
-    const trace = captureTrace ? [{ x: candidate.x, y: candidate.y, t: 0, ease: "fall" }] : null;
-    let settled = false;
-    let finalX = candidate.x;
-    let finalY = candidate.y;
-
-    Matter.Body.setVelocity(ball, { x: candidate.vx, y: candidate.vy });
-    Matter.Body.setAngularVelocity(ball, candidate.spin);
-    Matter.Composite.add(engine.world, ball);
-
-    for (let step = 1; step <= maxSteps; step += 1) {
-      Matter.Engine.update(engine, stepMs);
-      finalX = ball.position.x;
-      finalY = ball.position.y;
-
-      if (captureTrace && step % 2 === 0) {
-        trace.push({
-          x: finalX,
-          y: finalY,
-          t: step * stepMs / 1000,
-          ease: "physics"
-        });
-      }
-
-      if (finalY >= metrics.slotY - metrics.ballRadius * 0.1) {
-        settled = true;
-        break;
-      }
-
-      if (finalY > metrics.height + metrics.ballRadius * 8) {
-        break;
-      }
-    }
-
-    const pocket = pocketFromX(finalX, metrics);
-    const settleX = clamp(
-      finalX,
-      pocket * metrics.slotStep + metrics.ballRadius * 1.35,
-      (pocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35
-    );
-
-    if (captureTrace) {
-      trace.push({
-        x: settleX,
-        y: metrics.slotY - metrics.ballRadius * 0.1,
-        t: Math.max((trace[trace.length - 1] || { t: 0 }).t + 0.08, engine.timing.timestamp / 1000),
-        ease: "fall"
-      });
-      trace.durationMs = clamp(engine.timing.timestamp * 0.78, 2300, 6200);
-      trace.settlePocket = pocket;
-      trace.settleX = settleX;
-    }
-
-    Matter.Composite.clear(engine.world, false);
-    Matter.Engine.clear(engine);
-
-    return {
-      pocket,
-      finalX: settleX,
-      settled,
-      trace
-    };
-  }
-
-  function matterCandidate(index, rng, options, metrics) {
-    const launchX = launchXForSide(options.side, metrics);
-    const launchSpread = metrics.slotStep * 0.42;
-    const controlledBias = index < 8 ? (index - 3.5) / 3.5 : rng() * 2 - 1;
-    const randomBias = rng() * 2 - 1;
-
-    return {
-      x: clamp(
-        launchX + controlledBias * launchSpread * 0.45 + randomBias * launchSpread * 0.18,
-        metrics.left + metrics.ballRadius,
-        metrics.right - metrics.ballRadius
-      ),
-      y: metrics.gateY + options.queueOffset + options.verticalJitter,
-      vx: (rng() - 0.5) * 0.18,
-      vy: 0.01,
-      spin: (rng() - 0.5) * 0.035,
-      driftSeed: rng() * Math.PI * 2
-    };
-  }
-
-  function chooseMatterPlan(options, metrics, profile, rng) {
-    return matterCandidate(0, rng, options, metrics);
-  }
-
-  function buildMatterDropTrace(options) {
-    if (!matterReady()) {
-      return null;
-    }
-
-    const metrics = boardMetrics(state.view.width, state.view.height);
-    const profile = matterProfile(options.risk);
-    const rng = seededRandom(options.seed);
-    const plan = chooseMatterPlan(options, metrics, profile, rng);
-    const result = runMatterCandidate(options, metrics, profile, plan, true);
-
-    return result.trace;
-  }
-
-  function buildDropTrace(options) {
-    return buildSpribePlinkoTrace(options);
-  }
-
-  function plinkoX(stepIndex, rights, metrics) {
-    return metrics.centerX + (rights - stepIndex / 2) * metrics.slotStep;
-  }
-
-  function shuffledPlinkoSteps(targetPocket, seed) {
-    const rng = seededRandom(seed);
-    const steps = [];
-
-    for (let index = 0; index < PLINKO_ROWS; index += 1) {
-      steps.push(index < targetPocket ? 1 : 0);
-    }
-
-    for (let index = steps.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(rng() * (index + 1));
-      const value = steps[index];
-      steps[index] = steps[swapIndex];
-      steps[swapIndex] = value;
-    }
-
-    return steps;
-  }
-
-  function buildSpribePlinkoTrace(options) {
-    const width = state.view.width;
-    const height = state.view.height;
-    const metrics = boardMetrics(width, height);
-    const rows = pegRows(width, height);
-    const targetPocket = clamp(Math.round(Number(options.targetPocket) || 0), 0, metrics.pocketCount - 1);
-    const steps = shuffledPlinkoSteps(targetPocket, options.seed);
-    const trace = [];
-    const rowTime = 0.34;
-    let rights = 0;
-    let time = 0;
-
-    trace.push({
-      x: metrics.centerX,
-      y: metrics.gateY + options.queueOffset,
-      t: time,
-      ease: "fall"
-    });
-
-    time += 0.3;
-    trace.push({
-      x: metrics.centerX,
-      y: rows[0].y - metrics.pegRadius * 4,
-      t: time,
-      ease: "fall"
-    });
-
-    rows.forEach(function (row, rowIndex) {
-      const currentX = plinkoX(rowIndex, rights, metrics);
-      const currentY = row.y;
-      const step = steps[rowIndex];
-      const nextRights = rights + step;
-      const nextX = plinkoX(rowIndex + 1, nextRights, metrics);
-      const exitX = lerp(currentX, nextX, 0.72);
-      const exitY = currentY + (rows[rowIndex + 1] ? rows[rowIndex + 1].y - currentY : metrics.chuteTop - currentY) * 0.44;
-
-      time += rowTime * 0.34;
-      trace.push({
-        x: currentX,
-        y: currentY - metrics.pegRadius * 2.2,
-        t: time,
-        ease: "fall"
-      });
-
-      time += rowTime * 0.2;
-      trace.push({
-        x: currentX,
-        y: currentY,
-        t: time,
-        ease: "fall"
-      });
-
-      time += rowTime * 0.46;
-      trace.push({
-        x: exitX,
-        y: exitY,
-        t: time,
-        ease: "bounce"
-      });
-
-      rights = nextRights;
-    });
-
-    const targetX = slotCenterX(targetPocket, metrics);
-
-    time += 0.32;
-    trace.push({
-      x: targetX,
-      y: metrics.chuteTop - metrics.ballRadius * 1.4,
-      t: time,
-      ease: "fall"
-    });
-
-    time += 0.28;
-    trace.push({
-      x: targetX,
-      y: metrics.slotY - metrics.ballRadius * 0.1,
-      t: time,
-      ease: "fall"
-    });
-
-    trace.durationMs = trace[trace.length - 1].t * 1000;
-    trace.settlePocket = targetPocket;
-    trace.settleX = targetX;
-
-    return trace;
-  }
-
-  function createLiveMatterPhysics(width, height, risk) {
-    const Matter = window.Matter;
-    const metrics = boardMetrics(width, height);
-    const physics = {
-      engine: createMatterEngine(metrics, matterProfile(risk)),
-      metrics,
-      profile: matterProfile(risk),
-      accumulator: 0,
-      lastTime: null
-    };
-
-    Matter.Events.on(physics.engine, "collisionStart", function (event) {
-      event.pairs.forEach(function (pair) {
-        const bodyA = pair.bodyA;
-        const bodyB = pair.bodyB;
-        const ballBody = bodyA.label === "drop-ball" ? bodyA : bodyB.label === "drop-ball" ? bodyB : null;
-        const pegBody = bodyA.label === "peg" ? bodyA : bodyB.label === "peg" ? bodyB : null;
-
-        if (ballBody && pegBody && ballBody.gambaBall) {
-          applyPegCollisionBias(ballBody.gambaBall, ballBody, pegBody, physics);
-        }
-      });
-    });
-
-    return physics;
-  }
-
-  function createLiveMatterBody(ball, physics) {
-    const Matter = window.Matter;
-    const launch = ball.matterLaunch;
-    const body = Matter.Bodies.circle(launch.x, launch.y, ball.r, {
-      label: "drop-ball",
-      restitution: physics.profile.restitution,
-      friction: physics.profile.friction,
-      frictionStatic: 0,
-      frictionAir: physics.profile.frictionAir,
-      density: 0.001,
-      collisionFilter: {
-        category: MATTER_BALL_CATEGORY,
-        mask: MATTER_STATIC_CATEGORY
-      }
-    });
-
-    Matter.Body.setVelocity(body, { x: launch.vx, y: launch.vy });
-    Matter.Body.setAngularVelocity(body, launch.spin);
-    body.gambaBall = ball;
-    Matter.Composite.add(physics.engine.world, body);
-
-    ball.body = body;
-    ball.active = true;
-    ball.x = launch.x;
-    ball.y = launch.y;
-  }
-
-  function settleMatterBall(ball, animation) {
-    if (ball.settled) {
+  function setRisk(risk) {
+    if (state.playing || !riskConfigs[risk]) {
       return;
     }
 
-    const Matter = window.Matter;
-    const metrics = animation.physics.metrics;
-    const body = ball.body;
-    const pocket = pocketFromX(body.position.x, metrics);
-    const settleX = clamp(
-      body.position.x,
-      pocket * metrics.slotStep + ball.r * 1.35,
-      (pocket + 1) * metrics.slotStep - ball.r * 1.35
-    );
-    const multiplier = stripSlots()[pocket];
-
-    if (!ball.lockedPayout) {
-      ball.targetPocket = pocket;
-      ball.multiplier = multiplier;
-      ball.payout = roundMoney(ball.wager * multiplier);
-    }
-
-    ball.settled = true;
-    ball.pocket = ball.targetPocket;
-    ball.settleX = settleX;
-    ball.x = settleX;
-    ball.y = metrics.slotY - ball.r * 0.1;
-    ball.vx = 0;
-    ball.vy = 0;
-    ball.trail = [];
-
-    Matter.Composite.remove(animation.physics.engine.world, body);
-    ball.body = null;
-
-    state.lastPockets = animation.balls
-      .filter(function (candidate) {
-        return candidate.settled;
-      })
-      .map(function (candidate) {
-        return candidate.pocket;
-      });
+    state.risk = risk;
+    state.lastPockets = [];
+    riskButtons.forEach(function (button) {
+      button.classList.toggle("is-active", button.dataset.risk === risk);
+    });
+    updateDisplay();
     renderStrip();
+    drawBoard();
   }
 
-  function applyPegCollisionBias(ball, body, pegBody, physics) {
-    if (!body || ball.settled) {
+  function setBallCount(value) {
+    if (state.playing) {
+      ballCountInput.value = String(state.ballCount);
       return;
     }
 
-    const metrics = physics.metrics;
-    const progress = clamp((body.position.y - metrics.playTop) / Math.max(1, metrics.playBottom - metrics.playTop), 0, 1);
-
-    if (body.position.y < metrics.playTop || body.position.y > metrics.playBottom || progress > 0.86) {
-      return;
-    }
-
-    const currentTime = physics.engine.timing.timestamp;
-
-    if (ball.lastPegBiasAt && currentTime - ball.lastPegBiasAt < 85) {
-      return;
-    }
-
-    const targetDirection = Math.sign(ball.driftTargetX - body.position.x) || 0;
-    const naturalDirection = Math.sign(body.position.x - pegBody.position.x) || targetDirection || (Math.random() > 0.5 ? 1 : -1);
-    const direction = targetDirection && Math.random() < ball.driftStrength ? targetDirection : naturalDirection;
-    const extra = 0.11 + Math.random() * 0.08;
-    const velocity = body.velocity;
-
-    window.Matter.Body.setVelocity(body, {
-      x: clamp(velocity.x + direction * extra, -2.35, 2.35),
-      y: clamp(velocity.y * 0.98, -2.6, 5.2)
-    });
-
-    ball.lastPegBiasAt = currentTime;
-  }
-
-  function limitMatterVelocity(ball) {
-    if (!ball.body) {
-      return;
-    }
-
-    const velocity = ball.body.velocity;
-    const cappedVelocity = {
-      x: clamp(velocity.x, -2.4, 2.4),
-      y: clamp(velocity.y, -2.4, 4.2)
-    };
-
-    if (cappedVelocity.x !== velocity.x || cappedVelocity.y !== velocity.y) {
-      window.Matter.Body.setVelocity(ball.body, cappedVelocity);
-    }
-  }
-
-  function stepLiveMatterPhysics(animation, timestamp) {
-    const physics = animation.physics;
-    const stepMs = 1000 / 60;
-
-    if (!physics.lastTime) {
-      physics.lastTime = timestamp;
-    }
-
-    animation.frameTime = timestamp;
-
-    animation.balls.forEach(function (ball) {
-      if (!ball.active && !ball.settled && timestamp >= ball.spawnAt) {
-        createLiveMatterBody(ball, physics);
-      }
-    });
-
-    physics.accumulator += clamp(timestamp - physics.lastTime, 0, 50);
-    physics.lastTime = timestamp;
-
-    while (physics.accumulator >= stepMs) {
-      window.Matter.Engine.update(physics.engine, stepMs);
-      animation.balls.forEach(function (ball) {
-        if (ball.active && !ball.settled) {
-          limitMatterVelocity(ball);
-        }
-      });
-      physics.accumulator -= stepMs;
-    }
-
-    animation.balls.forEach(function (ball) {
-      if (!ball.active || ball.settled || !ball.body) {
-        return;
-      }
-
-      ball.x = ball.body.position.x;
-      ball.y = ball.body.position.y;
-      ball.vx = ball.body.velocity.x;
-      ball.vy = ball.body.velocity.y;
-
-      ball.trail.push({ x: ball.x, y: ball.y });
-      if (ball.trail.length > 12) {
-        ball.trail.shift();
-      }
-
-      if (
-        ball.y >= physics.metrics.slotY - ball.r * 0.1 ||
-        (timestamp - ball.spawnAt > 18000 && ball.y > physics.metrics.playBottom)
-      ) {
-        settleMatterBall(ball, animation);
-      }
-    });
-  }
-
-  function plannedRowStep(row, x, side, metrics, profile, clearance, noise) {
-    const impact = rowDeflection(row, x, side, clearance);
-    const hitX = clamp(
-      impact.x,
-      metrics.left + metrics.ballRadius,
-      metrics.right - metrics.ballRadius
-    );
-    const maxStep = row.gap * 1.35;
-    const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
-    const sameSideKick = impact.side * row.gap * profile.bounce;
-    const exitDesiredX = boundedHitX + sameSideKick + noise.wobble * row.gap * profile.wobble;
-    const exitX = clamp(
-      exitDesiredX,
-      Math.max(metrics.left + metrics.ballRadius, x - maxStep),
-      Math.min(metrics.right - metrics.ballRadius, x + maxStep)
-    );
-
-    return {
-      hitX: boundedHitX,
-      exitX,
-      side: impact.side
-    };
-  }
-
-  function pocketDistance(x, pocketLeft, pocketRight, targetX) {
-    if (x < pocketLeft) {
-      return pocketLeft - x + Math.abs(targetX - x) * 0.25;
-    }
-
-    if (x > pocketRight) {
-      return x - pocketRight + Math.abs(targetX - x) * 0.25;
-    }
-
-    return Math.abs(targetX - x) * 0.05;
-  }
-
-  function chooseBouncePlan(rows, metrics, launchX, targetPocket, profile, clearance, rng) {
-    const targetX = slotCenterX(targetPocket, metrics);
-    const pocketLeft = targetPocket * metrics.slotStep + metrics.ballRadius * 1.35;
-    const pocketRight = (targetPocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35;
-    const noise = rows.map(function () {
-      return {
-        wobble: rng() - 0.5,
-        rowTime: profile.rowTime + rng() * 0.05
-      };
-    });
-    let states = [{
-      x: launchX,
-      sides: [],
-      score: 0,
-      lastSide: 0
-    }];
-
-    rows.forEach(function (row, rowIndex) {
-      const progress = (rowIndex + 1) / (rows.length + 1);
-      const guideX = lerp(launchX, targetX, smoothstep(progress));
-      const remainingRows = Math.max(0, rows.length - rowIndex - 1);
-      const naturalReach = remainingRows * row.gap * (0.42 + profile.bounce);
-      const expanded = [];
-
-      states.forEach(function (stateItem) {
-        [-1, 1].forEach(function (side) {
-          const step = plannedRowStep(row, stateItem.x, side, metrics, profile, clearance, noise[rowIndex]);
-          const corridorCost = Math.abs(step.exitX - guideX) * 0.18;
-          const recoveryCost = Math.max(0, Math.abs(step.exitX - targetX) - naturalReach) * 0.85;
-          const switchCost = stateItem.lastSide && stateItem.lastSide !== side ? row.gap * 0.018 : 0;
-          const randomness = (rng() - 0.5) * row.gap * 0.03;
-
-          expanded.push({
-            x: step.exitX,
-            sides: stateItem.sides.concat(side),
-            score: stateItem.score * 0.94 + corridorCost + recoveryCost + switchCost + randomness,
-            lastSide: side
-          });
-        });
-      });
-
-      expanded.sort(function (a, b) {
-        return a.score - b.score;
-      });
-      states = expanded.slice(0, 64);
-    });
-
-    states.sort(function (a, b) {
-      const aScore = a.score + pocketDistance(a.x, pocketLeft, pocketRight, targetX) * 4;
-      const bScore = b.score + pocketDistance(b.x, pocketLeft, pocketRight, targetX) * 4;
-      return aScore - bScore;
-    });
-
-    return {
-      sides: states[0] ? states[0].sides : [],
-      noise
-    };
-  }
-
-  function buildPlannedDropTrace(options) {
-    const width = state.view.width;
-    const height = state.view.height;
-    const metrics = boardMetrics(width, height);
-    const rows = pegRows(width, height);
-    const rng = seededRandom(options.seed);
-    const launchX = launchXForSide(options.side, metrics);
-    const profile = {
-      low: { wobble: 0.04, rowTime: 0.27, bounce: 0.32 },
-      medium: { wobble: 0.06, rowTime: 0.25, bounce: 0.44 },
-      high: { wobble: 0.09, rowTime: 0.23, bounce: 0.56 }
-    }[options.risk] || { wobble: 0.06, rowTime: 0.25, bounce: 0.44 };
-    const clearance = metrics.pegRadius + metrics.ballRadius * 0.9;
-    const pocketLeft = options.targetPocket * metrics.slotStep + metrics.ballRadius * 1.35;
-    const pocketRight = (options.targetPocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35;
-    const trace = [{
-      x: launchX,
-      y: metrics.gateY + options.queueOffset + options.verticalJitter,
-      t: 0
-    }];
-    let x = launchX;
-    let time = 0;
-
-    if (rows.length) {
-      const firstRowY = rows[0].y;
-
-      time += 0.16;
-      trace.push({
-        x: launchX,
-        y: lerp(metrics.gateY, firstRowY, 0.12),
-        t: time,
-        ease: "fall"
-      });
-      time += 0.2;
-      trace.push({
-        x: launchX,
-        y: lerp(metrics.gateY, firstRowY, 0.45),
-        t: time,
-        ease: "fall"
-      });
-      time += 0.26;
-      trace.push({
-        x: launchX,
-        y: firstRowY - metrics.pegRadius * 3.8,
-        t: time,
-        ease: "fall"
-      });
-      x = launchX;
-    }
-
-    const plan = chooseBouncePlan(rows, metrics, launchX, options.targetPocket, profile, clearance, rng);
-
-    rows.forEach(function (row, rowIndex) {
-      const noise = plan.noise[rowIndex] || {
-        wobble: rng() - 0.5,
-        rowTime: profile.rowTime + rng() * 0.05
-      };
-      const side = plan.sides[rowIndex] || (rng() >= 0.5 ? 1 : -1);
-      const step = plannedRowStep(row, x, side, metrics, profile, clearance, noise);
-      const rowTime = noise.rowTime * (rowIndex < 3 ? 1.28 : 1);
-      const aboveY = row.y - metrics.pegRadius * 2.3;
-      const exitY = row.y + metrics.pegRadius * 2.4;
-
-      time += rowTime * 0.36;
-      trace.push({ x, y: aboveY, t: time, ease: "fall" });
-      time += rowTime * 0.28;
-      trace.push({ x: step.hitX, y: row.y, t: time });
-      time += rowTime * 0.36;
-      trace.push({ x: step.exitX, y: exitY, t: time, ease: "bounce" });
-      x = step.exitX;
-    });
-
-    const chuteX = clamp(x, pocketLeft, pocketRight);
-
-    time += 0.22;
-    trace.push({
-      x: chuteX,
-      y: metrics.chuteTop - metrics.ballRadius * 1.6,
-      t: time,
-      ease: "fall"
-    });
-    time += 0.18;
-    trace.push({
-      x: chuteX,
-      y: metrics.chuteTop + metrics.ballRadius * 1.2,
-      t: time,
-      ease: "fall"
-    });
-    time += 0.22;
-    trace.push({
-      x: chuteX,
-      y: lerp(metrics.chuteTop, metrics.slotY, 0.56),
-      t: time,
-      ease: "fall"
-    });
-    time += 0.22;
-    trace.push({
-      x: chuteX,
-      y: metrics.slotY - metrics.ballRadius * 0.1,
-      t: time,
-      ease: "fall"
-    });
-
-    return trace;
+    state.ballCount = clamp(Math.round(Number(value) || 1), 1, MAX_BALLS);
+    ballCountInput.value = String(state.ballCount);
+    updateDisplay();
   }
 
   function updateDisplay() {
+    const balls = selectedBallCount();
     const balance = configuredBalance();
-    const ballCount = selectedBallCount();
-    const maxPerBall = maxWholeWagerPerBall(balance || state.balance, ballCount);
+    const maxPerBall = maxWholeWagerPerBall(balance || state.balance, balls);
 
     balanceLabelEl.textContent = state.mode === "demo" ? "Demo balance" : "Wallet balance";
     balanceEl.textContent = amountLabel(balance);
     profitEl.textContent = amountLabel(state.profit);
     roundCount.textContent = String(state.history.length);
     wagerInput.max = String(maxPerBall);
-    ballCountValueEl.textContent = String(ballCount);
-    playButton.querySelector("span").textContent = ballCount > 1 ? "Launch " + ballCount : "Launch";
-    playButton.title = "RTP " + ((expectedRtpForRisk(state.risk) || TARGET_RTP) * 100).toFixed(2) + "%";
+    ballCountValueEl.textContent = String(balls);
+    playButton.querySelector("span").textContent = balls > 1 ? "Drop " + balls : "Drop";
+    playButton.title = "RTP " + (expectedRtpForRisk(state.risk) * 100).toFixed(2) + "%";
   }
 
   function renderStrip() {
@@ -1168,11 +481,11 @@
 
       const main = document.createElement("span");
       main.className = "history-main";
-      main.textContent = round.balls > 1 ? round.balls + " balls" : multiplierLabel(round.bestMultiplier);
+      main.textContent = round.balls > 1 ? round.balls + " drops" : multiplierLabel(round.bestMultiplier);
 
       const side = document.createElement("span");
       side.className = "history-side";
-      side.textContent = round.sideLabel.toUpperCase() + " / " + round.risk.toUpperCase();
+      side.textContent = "PLINKO / " + round.risk.toUpperCase();
 
       const wager = document.createElement("span");
       wager.className = "history-side";
@@ -1210,69 +523,63 @@
 
     const bg = ctx.createLinearGradient(0, 0, width, height);
     bg.addColorStop(0, "#101410");
-    bg.addColorStop(0.55, "#182019");
+    bg.addColorStop(0.58, "#182019");
     bg.addColorStop(1, "#101514");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
-    drawLaunchGates(width, height);
+    drawDropGate(width, height);
     drawPegs(width, height);
     drawSlotWalls(width, height);
     drawBalls(width, height);
   }
 
-  function drawLaunchGates(width, height) {
+  function drawDropGate(width, height) {
     const metrics = boardMetrics(width, height);
-    const gateWidth = clamp(width * 0.07, 58, 76);
-    const gateHeight = clamp(height * 0.07, 30, 42);
-    const bandX = width * 0.39;
-    const bandY = metrics.gateY - gateHeight * 0.95;
-    const bandWidth = width * 0.22;
-    const bandHeight = gateHeight * 1.9;
+    const gateWidth = clamp(width * 0.09, 64, 88);
+    const gateHeight = clamp(height * 0.065, 32, 44);
+    const bandWidth = gateWidth + 42;
+    const bandHeight = gateHeight + 22;
+    const x = metrics.centerX - bandWidth / 2;
+    const y = metrics.gateY - bandHeight / 2;
 
     ctx.save();
-    drawRoundedRect(bandX, bandY, bandWidth, bandHeight, 8);
+    drawRoundedRect(x, y, bandWidth, bandHeight, 8);
     ctx.fillStyle = "rgba(244,239,227,0.035)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(244,239,227,0.1)";
+    ctx.strokeStyle = "rgba(244,239,227,0.11)";
     ctx.stroke();
-    drawGate(metrics.centerX, metrics.gateY, "DROP", gateWidth, gateHeight, true);
-    ctx.restore();
-  }
 
-  function drawGate(x, y, label, width, height, active) {
-    ctx.save();
-    ctx.translate(x, y);
-    drawRoundedRect(-width / 2, -height / 2, width, height, 8);
-    ctx.fillStyle = active ? "rgba(71,199,143,0.18)" : "rgba(244,239,227,0.07)";
+    drawRoundedRect(metrics.centerX - gateWidth / 2, metrics.gateY - gateHeight / 2, gateWidth, gateHeight, 8);
+    ctx.fillStyle = "rgba(71,199,143,0.18)";
     ctx.fill();
-    ctx.strokeStyle = active ? "rgba(71,199,143,0.6)" : "rgba(244,239,227,0.18)";
+    ctx.strokeStyle = "rgba(71,199,143,0.68)";
     ctx.stroke();
-    ctx.fillStyle = active ? "#47c78f" : "#f4efe3";
-    ctx.font = "800 12px system-ui, sans-serif";
+    ctx.fillStyle = "#47c78f";
+    ctx.font = "900 12px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, 0, 0);
+    ctx.fillText("DROP", metrics.centerX, metrics.gateY);
     ctx.restore();
   }
 
   function drawPegs(width, height) {
+    const metrics = boardMetrics(width, height);
     const pegs = createPegs(width, height);
 
     ctx.save();
     pegs.forEach(function (peg, index) {
-      const radius = peg.r;
-      const glow = ctx.createRadialGradient(peg.x, peg.y, 1, peg.x, peg.y, radius * 4);
-      glow.addColorStop(0, "rgba(77,184,200,0.34)");
+      const glow = ctx.createRadialGradient(peg.x, peg.y, 1, peg.x, peg.y, metrics.pegGlow);
+      glow.addColorStop(0, "rgba(77,184,200,0.35)");
       glow.addColorStop(1, "rgba(77,184,200,0)");
       ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(peg.x, peg.y, radius * 4, 0, Math.PI * 2);
+      ctx.arc(peg.x, peg.y, metrics.pegGlow, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = index % 4 === 0 ? "rgba(227,180,72,0.86)" : "rgba(77,184,200,0.92)";
+      ctx.fillStyle = index % 5 === 0 ? "rgba(227,180,72,0.88)" : "rgba(77,184,200,0.94)";
       ctx.beginPath();
-      ctx.arc(peg.x, peg.y, radius, 0, Math.PI * 2);
+      ctx.arc(peg.x, peg.y, peg.r, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "rgba(244,239,227,0.45)";
       ctx.lineWidth = 1;
@@ -1311,22 +618,18 @@
   }
 
   function drawBalls(width, height) {
-    const balls = state.animation ? state.animation.balls : state.restingBalls;
-    const frameTime = state.animation ? state.animation.frameTime || 0 : 0;
-    if (!balls.length) {
-      return;
-    }
+    const balls = state.animation ? state.animation.balls : [];
+    const now = state.animation ? state.animation.frameTime || 0 : 0;
 
     balls.forEach(function (ball) {
       if (ball.settled) {
         return;
       }
 
-      if (!ball.active && !ball.settled) {
-        if (frameTime && ball.spawnAt - frameTime <= 130) {
-          drawQueuedBall(ball, width, height);
+      if (!ball.active) {
+        if (now && ball.spawnAt - now <= 140) {
+          drawQueuedBall(ball);
         }
-
         return;
       }
 
@@ -1335,17 +638,14 @@
     });
   }
 
-  function drawQueuedBall(ball, width, height) {
-    const metrics = boardMetrics(width, height);
-    const firstPoint = ball.trace && ball.trace[0] ? ball.trace[0] : null;
-    const x = firstPoint ? firstPoint.x : launchXForSide(ball.side, metrics);
-    const y = firstPoint ? firstPoint.y : metrics.gateY + ball.queueOffset;
+  function drawQueuedBall(ball) {
+    const point = ball.trace[0];
 
     ctx.save();
     ctx.globalAlpha = 0.25;
     ctx.fillStyle = "#e3b448";
     ctx.beginPath();
-    ctx.arc(x, y, ball.r, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, ball.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -1364,8 +664,10 @@
   }
 
   function drawBall(ball) {
-    ctx.save();
+    const fill = ctx.createRadialGradient(ball.x - ball.r * 0.38, ball.y - ball.r * 0.5, 1, ball.x, ball.y, ball.r);
     const shadow = ctx.createRadialGradient(ball.x, ball.y, 1, ball.x, ball.y, ball.r * 2.8);
+
+    ctx.save();
     shadow.addColorStop(0, "rgba(71,199,143,0.32)");
     shadow.addColorStop(1, "rgba(71,199,143,0)");
     ctx.fillStyle = shadow;
@@ -1373,7 +675,6 @@
     ctx.arc(ball.x, ball.y, ball.r * 2.8, 0, Math.PI * 2);
     ctx.fill();
 
-    const fill = ctx.createRadialGradient(ball.x - ball.r * 0.38, ball.y - ball.r * 0.5, 1, ball.x, ball.y, ball.r);
     fill.addColorStop(0, "#fff7d0");
     fill.addColorStop(0.34, "#e3b448");
     fill.addColorStop(1, "#d85f45");
@@ -1387,84 +688,42 @@
     ctx.restore();
   }
 
-  function chooseSide() {
-    const sides = state.selectedSides.length ? state.selectedSides : ["center"];
-    return sides[Math.floor(secureRandom() * sides.length)];
-  }
-
-  function createBall(index, total, wager, side, now, targetTier, resolved) {
-    const height = state.view.height;
-    const metrics = boardMetrics(state.view.width, height);
-    const queueOffset = 0;
-    const verticalJitter = 0;
-    const targetPocket = resolved && Number.isFinite(Number(resolved.pocket))
-      ? Number(resolved.pocket)
-      : targetPocketFromTier(targetTier);
-    const spawnDelay = total > 60 ? 75 : total > 30 ? 95 : total > 10 ? 125 : 180;
-    const traceOptions = {
-      side,
-      targetPocket,
-      ballIndex: index,
-      totalBalls: total,
-      queueOffset,
-      verticalJitter,
-      risk: state.risk,
-      seed: randomSeed()
-    };
-    const trace = buildDropTrace(traceOptions);
+  function createBall(index, total, wager, now, resolved) {
+    const metrics = boardMetrics(state.view.width, state.view.height);
+    const tier = resolved && Number.isFinite(Number(resolved.tier)) ? Number(resolved.tier) : weightedTier(activeWeights());
+    const targetPocket = resolved && Number.isFinite(Number(resolved.pocket)) ? Number(resolved.pocket) : targetPocketFromTier(tier);
+    const multiplier = resolved && Number.isFinite(Number(resolved.multiplier)) ? Number(resolved.multiplier) : stripSlots()[targetPocket];
+    const trace = buildPlinkoTrace(targetPocket, randomSeed());
     const start = trace[0];
-    const displayPocket = targetPocket;
-    const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
-      ? Number(resolved.multiplier)
-      : stripSlots()[displayPocket];
-    const duration = trace ? trace.durationMs || Math.max(3200, trace[trace.length - 1].t * 1250) : 0;
+    const spawnDelay = total > 60 ? 72 : total > 30 ? 92 : total > 10 ? 120 : 170;
 
     return {
       id: index,
-      side,
-      risk: state.risk,
       wager,
-      targetTier,
-      targetPocket: displayPocket,
-      settleX: trace && Number.isFinite(Number(trace.settleX)) ? Number(trace.settleX) : start.x,
+      targetTier: tier,
+      targetPocket,
+      multiplier,
+      payout: resolved && Number.isFinite(Number(resolved.payout))
+        ? roundMoney(Number(resolved.payout))
+        : roundMoney(wager * multiplier),
       r: metrics.ballRadius,
       x: start.x,
       y: start.y,
       vx: 0,
       vy: 0,
       trace,
-      duration,
       traceIndex: 0,
+      duration: trace.durationMs,
       spawnAt: now + index * spawnDelay,
-      queueOffset,
       active: false,
       settled: false,
       pocket: null,
-      multiplier,
-      payout: resolved && Number.isFinite(Number(resolved.payout))
-        ? roundMoney(Number(resolved.payout))
-        : roundMoney(wager * multiplier),
-      lockedPayout: true,
-      matterLaunch: null,
-      driftTargetX: slotCenterX(displayPocket, metrics),
-      driftSeed: randomSeed(),
-      driftStrength: resolved ? 0.24 : 0.14,
       trail: []
     };
   }
 
-  function stepPhysics(animation, timestamp) {
-    if (animation.physics) {
-      stepLiveMatterPhysics(animation, timestamp);
-      return;
-    }
-
-    if (!animation.lastTime) {
-      animation.lastTime = timestamp;
-    }
-
+  function stepAnimation(animation, timestamp) {
     animation.frameTime = timestamp;
-    animation.lastTime = timestamp;
 
     animation.balls.forEach(function (ball) {
       if (ball.settled || timestamp < ball.spawnAt) {
@@ -1475,24 +734,22 @@
         ball.active = true;
       }
 
-      followBallTrace(ball, timestamp);
+      followTrace(ball, timestamp);
 
       if (!ball.settled) {
         ball.trail.push({ x: ball.x, y: ball.y });
-        if (ball.trail.length > 12) {
+        if (ball.trail.length > 10) {
           ball.trail.shift();
         }
       }
     });
   }
 
-  function followBallTrace(ball, timestamp) {
-    const metrics = boardMetrics(state.view.width, state.view.height);
-    const elapsed = Math.max(0, timestamp - ball.spawnAt);
-    const trace = ball.trace;
-    const traceEnd = trace[trace.length - 1].t;
+  function followTrace(ball, timestamp) {
+    const elapsed = timestamp - ball.spawnAt;
     const playback = clamp(elapsed / ball.duration, 0, 1);
-    const traceTime = traceEnd * playback;
+    const trace = ball.trace;
+    const traceTime = trace[trace.length - 1].t * playback;
     let index = ball.traceIndex || 0;
 
     while (index < trace.length - 2 && trace[index + 1].t < traceTime) {
@@ -1502,7 +759,7 @@
     const current = trace[index];
     const next = trace[Math.min(trace.length - 1, index + 1)];
     const rawLocal = next.t > current.t ? clamp((traceTime - current.t) / (next.t - current.t), 0, 1) : 1;
-    const local = traceEase(next.ease, rawLocal);
+    const local = ease(next.ease, rawLocal);
     const nextX = lerp(current.x, next.x, local);
     const nextY = lerp(current.y, next.y, local);
     const dt = Math.max(0.016, (timestamp - (ball.lastPathTimestamp || timestamp - 16)) / 1000);
@@ -1515,8 +772,6 @@
     ball.lastPathTimestamp = timestamp;
 
     if (playback >= 1) {
-      ball.x = Number.isFinite(ball.settleX) ? ball.settleX : slotCenterX(ball.targetPocket, metrics);
-      ball.y = metrics.slotY - ball.r * 0.1;
       settleBall(ball);
     }
   }
@@ -1526,17 +781,10 @@
       return;
     }
 
-    const metrics = boardMetrics(state.view.width, state.view.height);
-    const targetX = Number.isFinite(ball.settleX) ? ball.settleX : slotCenterX(ball.targetPocket, metrics);
-    const targetY = metrics.slotY - ball.r * 0.1;
-    const pocket = ball.targetPocket;
-    const multiplier = ball.multiplier;
-
     ball.settled = true;
-    ball.pocket = pocket;
-    ball.multiplier = multiplier;
-    ball.x = targetX;
-    ball.y = targetY;
+    ball.pocket = ball.targetPocket;
+    ball.x = ball.trace.settleX;
+    ball.y = ball.trace[ball.trace.length - 1].y;
     ball.vx = 0;
     ball.vy = 0;
     ball.trail = [];
@@ -1557,7 +805,7 @@
       return;
     }
 
-    stepPhysics(state.animation, timestamp);
+    stepAnimation(state.animation, timestamp);
     drawBoard();
 
     if (state.animation.balls.every(function (ball) { return ball.settled; })) {
@@ -1568,81 +816,78 @@
     window.requestAnimationFrame(animate);
   }
 
+  function normalizeWagerForBalance(wager, balls) {
+    const balanceForClamp = state.mode === "demo" ? state.balance : state.liveBalance;
+    const shouldClamp = state.mode === "demo" || Number.isFinite(state.liveBalance);
+
+    if (!shouldClamp) {
+      return wager;
+    }
+
+    const maxPerBall = maxWholeWagerPerBall(balanceForClamp, balls);
+    if (maxPerBall < 1) {
+      return 0;
+    }
+
+    return Math.min(wager, maxPerBall);
+  }
+
   function startRound() {
     if (state.playing) {
       return;
     }
 
-    let wager = selectedWager();
     const balls = selectedBallCount();
+    let wager = selectedWager();
 
     if (wager <= 0) {
       wager = 1;
     }
 
-    const balanceForClamp = state.mode === "demo" ? state.balance : state.liveBalance;
-    const shouldClampToBalance = state.mode === "demo" || Number.isFinite(state.liveBalance);
-
-    if (shouldClampToBalance) {
-      const maxPerBall = maxWholeWagerPerBall(balanceForClamp, balls);
-
-      if (maxPerBall < 1) {
-        wagerInput.value = "0";
-        lastResultEl.textContent = "Not enough balance";
-        updateDisplay();
-        return;
-      }
-
-      if (wager > maxPerBall) {
-        wager = maxPerBall;
-      }
+    wager = normalizeWagerForBalance(wager, balls);
+    if (wager < 1) {
+      wagerInput.value = "0";
+      lastResultEl.textContent = "Not enough balance";
+      updateDisplay();
+      return;
     }
 
     wagerInput.value = String(wager);
-    const totalWager = roundMoney(wager * balls);
-
-    if (wager <= 0) {
-      wagerInput.value = "1";
-      return;
-    }
 
     if (state.mode === "live") {
       startLiveRound(wager, balls);
       return;
     }
 
+    startDemoAnimation(wager, balls);
+  }
+
+  function startDemoAnimation(wager, balls) {
     const now = performance.now();
+    const totalWager = roundMoney(wager * balls);
     const ballList = [];
+
     for (let index = 0; index < balls; index += 1) {
-      const side = chooseSide();
-      const targetTier = weightedTier(activeWeights());
-      ballList.push(createBall(index, balls, wager, side, now, targetTier));
+      ballList.push(createBall(index, balls, wager, now));
     }
 
     state.balance = roundMoney(state.balance - totalWager);
     state.playing = true;
     state.lastPockets = [];
-    state.restingBalls = [];
     state.animation = {
       balls: ballList,
       risk: state.risk,
-      requestedSides: state.selectedSides.slice(),
       ballWager: wager,
       totalWager,
       startedAt: now,
-      lastTime: null,
-      physics: null
+      frameTime: now
     };
 
     playButton.disabled = true;
-    lastResultEl.textContent = balls > 1 ? balls + " balls launched" : ballList[0].side.toUpperCase() + " launch";
+    lastResultEl.textContent = balls > 1 ? balls + " drops launched" : "Drop launched";
     updateDisplay();
     renderStrip();
     window.requestAnimationFrame(animate);
-  }
-
-  function sideLabelForBalls(balls) {
-    return "plinko";
   }
 
   function finishRound() {
@@ -1654,7 +899,6 @@
     const bestMultiplier = Math.max.apply(null, animation.balls.map(function (ball) {
       return ball.multiplier;
     }));
-    const sideLabel = sideLabelForBalls(animation.balls);
 
     if (animation.live) {
       if (Number.isFinite(state.liveBalance)) {
@@ -1667,7 +911,6 @@
     state.profit = roundMoney(state.profit + net);
     state.history.unshift({
       balls: animation.balls.length,
-      sideLabel,
       risk: animation.risk,
       wager: animation.ballWager,
       totalWager: animation.totalWager,
@@ -1675,17 +918,11 @@
       payout: totalPayout
     });
 
-    if (animation.physics && window.Matter) {
-      window.Matter.Composite.clear(animation.physics.engine.world, false);
-      window.Matter.Engine.clear(animation.physics.engine);
-    }
-
-    state.restingBalls = [];
     state.animation = null;
     state.playing = false;
     playButton.disabled = false;
     lastResultEl.textContent = animation.balls.length > 1
-      ? animation.balls.length + " balls / " + amountLabel(totalPayout)
+      ? animation.balls.length + " drops / " + amountLabel(totalPayout)
       : multiplierLabel(bestMultiplier) + " / " + amountLabel(totalPayout);
     updateDisplay();
     renderStrip();
@@ -1746,39 +983,28 @@
         index,
         results.length,
         Number(ballResult.wager || ballWager),
-        ballResult.side,
         now,
-        Number(ballResult.tier),
         ballResult
       );
     });
 
     state.lastPockets = [];
-    state.restingBalls = [];
     state.animation = {
       balls: ballList,
       risk: result.risk || state.risk,
-      requestedSides: state.selectedSides.slice(),
       ballWager,
       totalWager,
       startedAt: now,
-      lastTime: null,
-      physics: null,
+      frameTime: now,
       live: true,
       paymentSignature: result.paymentSignature,
       payoutSignature
     };
 
-    lastResultEl.textContent = results.length > 1
-      ? "Verified " + results.length + " balls"
-      : "Verified " + ballResultLabel(results[0]);
+    lastResultEl.textContent = results.length > 1 ? "Verified " + results.length + " drops" : "Verified drop";
     updateDisplay();
     renderStrip();
     window.requestAnimationFrame(animate);
-  }
-
-  function ballResultLabel(ballResult) {
-    return multiplierLabel(Number(ballResult.multiplier || 0));
   }
 
   async function startLiveRound(wager, balls) {
@@ -1800,7 +1026,8 @@
     let animationStarted = false;
 
     try {
-      const response = await fetch(config.apiBaseUrl.replace(/\/$/, "") + "/api/rounds/prepare", {
+      const apiBase = config.apiBaseUrl.replace(/\/$/, "");
+      const response = await fetch(apiBase + "/api/rounds/prepare", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1811,11 +1038,10 @@
           balls,
           totalWager: roundMoney(wager * balls),
           risk: state.risk,
-          sides: state.selectedSides.slice(),
+          sides: ["center"],
           tokenMint: config.token.mintAddress
         })
       });
-
       const payload = await response.json();
 
       if (!response.ok) {
@@ -1826,7 +1052,7 @@
       const paymentSignature = await signAndSendWagerTransaction(payload.wagerTransactionBase64);
 
       lastResultEl.textContent = "Settling wager";
-      const settleResponse = await fetch(config.apiBaseUrl.replace(/\/$/, "") + "/api/rounds/settle", {
+      const settleResponse = await fetch(apiBase + "/api/rounds/settle", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1869,59 +1095,6 @@
     state.view.height = height;
     drawBoard();
   }
-
-  function syncSideButtons() {
-    sideButtons.forEach(function (button) {
-      button.classList.toggle("is-active", state.selectedSides.indexOf(button.dataset.side) !== -1);
-    });
-  }
-
-  function toggleSide(side) {
-    if (state.playing) {
-      return;
-    }
-
-    const selectedIndex = state.selectedSides.indexOf(side);
-    if (selectedIndex === -1) {
-      state.selectedSides.push(side);
-    } else if (state.selectedSides.length > 1) {
-      state.selectedSides.splice(selectedIndex, 1);
-    }
-
-    syncSideButtons();
-  }
-
-  function setRisk(risk) {
-    if (state.playing) {
-      return;
-    }
-
-    state.risk = risk;
-    riskButtons.forEach(function (button) {
-      button.classList.toggle("is-active", button.dataset.risk === risk);
-    });
-    state.lastPockets = [];
-    state.restingBalls = [];
-    renderStrip();
-    drawBoard();
-  }
-
-  function setBallCount(value) {
-    if (state.playing) {
-      ballCountInput.value = String(state.ballCount);
-      return;
-    }
-
-    state.ballCount = clamp(Math.round(Number(value) || 1), 1, MAX_BALLS);
-    ballCountInput.value = String(state.ballCount);
-    updateDisplay();
-  }
-
-  sideButtons.forEach(function (button) {
-    button.addEventListener("click", function () {
-      toggleSide(button.dataset.side);
-    });
-  });
 
   riskButtons.forEach(function (button) {
     button.addEventListener("click", function () {
@@ -1970,7 +1143,6 @@
     state.lastPockets = [];
     state.history = [];
     state.animation = null;
-    state.restingBalls = [];
     lastResultEl.textContent = "Ready";
     updateDisplay();
     renderStrip();
@@ -1980,8 +1152,7 @@
 
   wagerInput.addEventListener("blur", function () {
     const maxPerBall = maxWholeWagerPerBall(configuredBalance() || state.balance, selectedBallCount());
-    const fixed = maxPerBall < 1 ? 0 : clamp(selectedWager(), 1, maxPerBall);
-    wagerInput.value = String(fixed);
+    wagerInput.value = String(maxPerBall < 1 ? 0 : clamp(selectedWager(), 1, maxPerBall));
   });
 
   if ("ResizeObserver" in window) {
@@ -1997,7 +1168,6 @@
   mintStatusEl.textContent = shortAddress(config.token.mintAddress);
   treasuryStatusEl.textContent = shortAddress(config.token.treasuryAddress);
   walletStatusEl.textContent = findSolanaWallet() ? "Ready" : "Not found";
-  syncSideButtons();
   setBallCount(1);
   updateDisplay();
   renderStrip();

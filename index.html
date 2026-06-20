@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Gamba Plinko</title>
-    <link rel="stylesheet" href="styles.css?v=20260620-24">
+    <link rel="stylesheet" href="styles.css?v=20260620-25">
   </head>
   <body>
     <main class="game-shell">
@@ -36,7 +36,7 @@
 
         <div class="field">
           <span class="field-label">Mode</span>
-          <div class="segmented mode-toggle" role="group" aria-label="Wager mode">
+          <div class="segmented mode-toggle" role="group" aria-label="Bet mode">
             <button type="button" data-mode="demo" class="is-active">Demo</button>
             <button type="button" data-mode="live">Token</button>
           </div>
@@ -48,7 +48,7 @@
         </div>
 
         <div class="field">
-          <label for="wager">Wager <span id="wagerUnit">GAMBA</span></label>
+          <label for="wager">Bet amount <span id="wagerUnit">GAMBA</span></label>
           <div class="wager-row">
             <button class="small-button" type="button" id="halfButton">1/2</button>
             <input id="wager" type="number" inputmode="decimal" min="1" step="1" value="25">
@@ -57,20 +57,11 @@
         </div>
 
         <div class="field">
-          <label for="ballCount">Balls <span id="ballCountValue">1</span></label>
+          <label for="ballCount">Drops <span id="ballCountValue">1</span></label>
           <div class="wager-row">
             <button class="small-button" type="button" id="ballsMinusButton">-</button>
             <input id="ballCount" type="number" inputmode="numeric" min="1" max="100" step="1" value="1">
             <button class="small-button" type="button" id="ballsPlusButton">+</button>
-          </div>
-        </div>
-
-        <div class="field side-field">
-          <span class="field-label">Side</span>
-          <div class="segmented" role="group" aria-label="Launch side">
-            <button type="button" data-side="left" class="is-active">Left</button>
-            <button type="button" data-side="center" class="is-active">Center</button>
-            <button type="button" data-side="right" class="is-active">Right</button>
           </div>
         </div>
 
@@ -87,7 +78,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M8 5v14l11-7z"></path>
           </svg>
-          <span>Launch</span>
+          <span>Drop</span>
         </button>
 
         <button class="reset-button" type="button" id="resetButton">
@@ -138,7 +129,7 @@
     </main>
 
     <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
-    <script src="config.js?v=20260620-24"></script>
-    <script src="app.js?v=20260620-24"></script>
+    <script src="config.js?v=20260620-25"></script>
+    <script src="app.js?v=20260620-25"></script>
   </body>
 </html>

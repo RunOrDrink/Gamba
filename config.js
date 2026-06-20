@@ -1,5 +1,5 @@
 window.GAMBA_CONFIG = {
-  appName: "Gamba Side Rush",
+  appName: "Gamba Plinko",
   network: "devnet",
   apiBaseUrl: "",
   liveTokenWagering: false,

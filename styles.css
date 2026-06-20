@@ -173,10 +173,6 @@ label,
   gap: 6px;
 }
 
-.side-field {
-  display: none;
-}
-
 .wager-row {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr) 54px;
