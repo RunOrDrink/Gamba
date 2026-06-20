@@ -50,7 +50,7 @@
     medium: { spread: 0.06, restitution: 0.5, drag: 0.997, pegKick: 6 },
     high: { spread: 0.09, restitution: 0.58, drag: 0.998, pegKick: 8 }
   };
-  const HONEYCOMB_COLUMNS = 25;
+  const HONEYCOMB_COLUMNS = 21;
   const TOP_ROW_EXTRA_EACH_SIDE = [0, 2, 2, 2, 1, 1];
   const WEIGHT_SCALE = 1000000;
 
@@ -299,6 +299,11 @@
     const minSide = Math.min(width, height);
     const pocketCount = 15;
     const slotStep = width / pocketCount;
+    const slotY = height - clamp(height * 0.018, 10, 16);
+    const chuteHeight = clamp(height * 0.062, 42, 68);
+    const chuteTop = slotY - chuteHeight;
+    const playBottom = chuteTop - clamp(height * 0.04, 26, 42);
+
     return {
       width,
       height,
@@ -307,9 +312,9 @@
       top: height * 0.06,
       gateY: height * 0.09,
       playTop: height * 0.17,
-      playBottom: height * 0.795,
-      chuteTop: height * 0.84,
-      slotY: height * 0.948,
+      playBottom,
+      chuteTop,
+      slotY,
       centerX: width * 0.5,
       pegLeft: slotStep * 0.5,
       pegRight: width - slotStep * 0.5,
@@ -510,7 +515,7 @@
       );
 
       time += rowTime * 0.36;
-      trace.push({ x: lerp(x, boundedHitX, 0.55), y: aboveY, t: time, ease: "fall" });
+      trace.push({ x, y: aboveY, t: time, ease: "fall" });
       time += rowTime * 0.28;
       trace.push({ x: boundedHitX, y: row.y, t: time });
       time += rowTime * 0.36;
@@ -518,30 +523,30 @@
       x = exitX;
     });
 
-    const chuteX = clamp(x + clamp(targetX - x, -metrics.slotStep * 0.45, metrics.slotStep * 0.45), pocketLeft, pocketRight);
+    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.08, pocketLeft, pocketRight);
 
-    time += 0.42;
+    time += 0.32;
     trace.push({
-      x: lerp(x, chuteX, 0.18),
-      y: metrics.chuteTop - metrics.ballRadius * 1.5,
+      x: chuteX,
+      y: metrics.chuteTop - metrics.ballRadius * 2.4,
       t: time,
       ease: "fall"
     });
-    time += 0.38;
+    time += 0.3;
     trace.push({
-      x: lerp(x, chuteX, 0.45),
+      x: chuteX,
       y: metrics.chuteTop + metrics.ballRadius * 1.8,
       t: time,
       ease: "fall"
     });
-    time += 0.46;
+    time += 0.36;
     trace.push({
-      x: lerp(chuteX, targetX, 0.55),
+      x: clamp(lerp(chuteX, targetX, 0.55), pocketLeft, pocketRight),
       y: lerp(metrics.chuteTop, metrics.slotY, 0.56),
       t: time,
       ease: "fall"
     });
-    time += 0.48;
+    time += 0.34;
     trace.push({
       x: targetX,
       y: metrics.slotY - metrics.ballRadius * 0.1,
@@ -714,13 +719,13 @@
 
   function drawSlotWalls(width, height) {
     const metrics = boardMetrics(width, height);
-    const wallWidth = clamp(metrics.slotStep * 0.055, 3, 6);
-    const floorY = height;
+    const wallWidth = clamp(metrics.slotStep * 0.035, 2, 4);
+    const floorY = metrics.slotY + metrics.ballRadius * 1.1;
 
     ctx.save();
-    ctx.fillStyle = "rgba(244,239,227,0.035)";
-    ctx.fillRect(0, metrics.chuteTop, width, floorY - metrics.chuteTop);
-    ctx.strokeStyle = "rgba(244,239,227,0.16)";
+    ctx.fillStyle = "rgba(244,239,227,0.018)";
+    ctx.fillRect(0, metrics.chuteTop, width, Math.max(0, floorY - metrics.chuteTop));
+    ctx.strokeStyle = "rgba(244,239,227,0.12)";
     ctx.lineWidth = wallWidth;
     ctx.lineCap = "round";
 
