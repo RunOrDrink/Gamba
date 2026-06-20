@@ -51,6 +51,8 @@
     high: { spread: 0.09, restitution: 0.58, drag: 0.998, pegKick: 8 }
   };
   const HONEYCOMB_COLUMNS = 25;
+  const TOP_ROW_EXTRA_EACH_SIDE = [0, 2, 2, 2, 1, 1];
+  const WEIGHT_SCALE = 1000000;
 
   const state = {
     balance: STARTING_BALANCE,
@@ -157,7 +159,7 @@
       return 0;
     }
 
-    return Math.floor(value * 100) / 100;
+    return Math.floor(value);
   }
 
   function selectedBallCount() {
@@ -171,6 +173,14 @@
 
   function configuredBalance() {
     return state.mode === "demo" ? state.balance : state.liveBalance || 0;
+  }
+
+  function maxWholeWagerPerBall(balance, balls) {
+    if (!Number.isFinite(balance)) {
+      return 0;
+    }
+
+    return Math.floor(Math.max(0, balance) / Math.max(1, balls));
   }
 
   function findSolanaWallet() {
@@ -240,19 +250,22 @@
   }
 
   function weightedTier(weights) {
-    const total = weights.reduce(function (sum, weight) {
+    const scaledWeights = weights.map(function (weight) {
+      return Math.round(weight * WEIGHT_SCALE);
+    });
+    const total = scaledWeights.reduce(function (sum, weight) {
       return sum + weight;
     }, 0);
-    let roll = secureRandom() * total;
+    let roll = Math.floor(secureRandom() * total);
 
-    for (let index = 0; index < weights.length; index += 1) {
-      roll -= weights[index];
+    for (let index = 0; index < scaledWeights.length; index += 1) {
+      roll -= scaledWeights[index];
       if (roll <= 0) {
         return index;
       }
     }
 
-    return weights.length - 1;
+    return scaledWeights.length - 1;
   }
 
   function expectedRtpForRisk(risk) {
@@ -323,7 +336,8 @@
       const baseStart = metrics.pegLeft + (isOffset ? fullGap / 2 : 0);
       const rowProgress = clamp(rowIndex / shoulderRows, 0, 1);
       const keepRatio = lerp(topKeepRatio, 1, smoothstep(rowProgress));
-      const keepCount = Math.max(7, Math.round(baseCount * keepRatio));
+      const rowExtra = (TOP_ROW_EXTRA_EACH_SIDE[rowIndex] || 0) * 2;
+      const keepCount = Math.min(baseCount, Math.max(7, Math.round(baseCount * keepRatio) + rowExtra));
       const parityAdjustedCount = keepCount % 2 === baseCount % 2 ? keepCount : keepCount + 1;
       const count = Math.min(baseCount, parityAdjustedCount);
       const trim = Math.floor((baseCount - count) / 2);
@@ -431,18 +445,24 @@
 
     if (rows.length) {
       const firstRowY = rows[0].y;
-      const drift = (rng() - 0.5) * metrics.slotStep * 0.08;
+      const drift = (rng() - 0.5) * metrics.slotStep * 0.025;
 
-      time += 0.34;
+      time += 0.48;
       trace.push({
-        x: launchX + drift * 0.25,
-        y: lerp(metrics.gateY, firstRowY, 0.24),
+        x: launchX,
+        y: lerp(metrics.gateY, firstRowY, 0.1),
         t: time
       });
-      time += 0.42;
+      time += 0.56;
+      trace.push({
+        x: launchX + drift * 0.18,
+        y: lerp(metrics.gateY, firstRowY, 0.34),
+        t: time
+      });
+      time += 0.62;
       trace.push({
         x: launchX + drift,
-        y: firstRowY - metrics.pegRadius * 3.4,
+        y: firstRowY - metrics.pegRadius * 3.8,
         t: time
       });
       x = launchX + drift;
@@ -463,7 +483,7 @@
         metrics.right - metrics.ballRadius
       );
       const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
-      const rowTime = (profile.rowTime + rng() * 0.07) * (rowIndex < 3 ? 1.35 : 1);
+      const rowTime = (profile.rowTime + rng() * 0.07) * (rowIndex < 3 ? 1.55 : 1);
       const aboveY = row.y - metrics.pegRadius * 2.3;
       const exitY = row.y + metrics.pegRadius * 2.4;
       const sameSideKick = impact.side * metrics.slotStep * profile.bounce * (1 - settlePull * 0.55);
@@ -517,7 +537,7 @@
   function updateDisplay() {
     const balance = configuredBalance();
     const ballCount = selectedBallCount();
-    const maxPerBall = Math.max(1, Math.floor(((balance || state.balance) / ballCount) * 100) / 100);
+    const maxPerBall = maxWholeWagerPerBall(balance || state.balance, ballCount);
 
     balanceLabelEl.textContent = state.mode === "demo" ? "Demo balance" : "Wallet balance";
     balanceEl.textContent = amountLabel(balance);
@@ -809,7 +829,7 @@
       seed: randomSeed()
     });
     const start = trace[0];
-    const duration = Math.max(3900, trace[trace.length - 1].t * 1450);
+    const duration = Math.max(4300, trace[trace.length - 1].t * 1550);
 
     return {
       id: index,
@@ -953,8 +973,32 @@
       return;
     }
 
-    const wager = selectedWager();
+    let wager = selectedWager();
     const balls = selectedBallCount();
+
+    if (wager <= 0) {
+      wager = 1;
+    }
+
+    const balanceForClamp = state.mode === "demo" ? state.balance : state.liveBalance;
+    const shouldClampToBalance = state.mode === "demo" || Number.isFinite(state.liveBalance);
+
+    if (shouldClampToBalance) {
+      const maxPerBall = maxWholeWagerPerBall(balanceForClamp, balls);
+
+      if (maxPerBall < 1) {
+        wagerInput.value = "0";
+        lastResultEl.textContent = "Not enough balance";
+        updateDisplay();
+        return;
+      }
+
+      if (wager > maxPerBall) {
+        wager = maxPerBall;
+      }
+    }
+
+    wagerInput.value = String(wager);
     const totalWager = roundMoney(wager * balls);
 
     if (wager <= 0) {
@@ -964,11 +1008,6 @@
 
     if (state.mode === "live") {
       startLiveRound(wager, balls);
-      return;
-    }
-
-    if (totalWager > state.balance) {
-      wagerInput.value = money(Math.max(1, state.balance / balls));
       return;
     }
 
@@ -1313,12 +1352,12 @@
 
   halfButton.addEventListener("click", function () {
     const balance = configuredBalance() || state.balance;
-    wagerInput.value = money(Math.max(1, balance / (2 * selectedBallCount())));
+    wagerInput.value = String(Math.max(0, Math.floor(balance / (2 * selectedBallCount()))));
   });
 
   maxButton.addEventListener("click", function () {
     const balance = configuredBalance() || state.balance;
-    wagerInput.value = money(Math.max(1, balance / selectedBallCount()));
+    wagerInput.value = String(maxWholeWagerPerBall(balance, selectedBallCount()));
   });
 
   resetButton.addEventListener("click", function () {
@@ -1340,9 +1379,9 @@
   });
 
   wagerInput.addEventListener("blur", function () {
-    const maxPerBall = Math.max(1, (configuredBalance() || state.balance) / selectedBallCount());
-    const fixed = clamp(selectedWager(), 1, maxPerBall);
-    wagerInput.value = money(fixed);
+    const maxPerBall = maxWholeWagerPerBall(configuredBalance() || state.balance, selectedBallCount());
+    const fixed = maxPerBall < 1 ? 0 : clamp(selectedWager(), 1, maxPerBall);
+    wagerInput.value = String(fixed);
   });
 
   if ("ResizeObserver" in window) {
