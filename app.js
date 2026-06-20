@@ -307,6 +307,8 @@
     const rowGap = fullGap * Math.sqrt(3) / 2;
     const availableHeight = metrics.playBottom - metrics.playTop;
     let rowCount = Math.max(9, Math.floor(availableHeight / rowGap) + 1);
+    const topKeepRatio = 0.48;
+    const shoulderRows = 8;
 
     if (rowCount % 2 === 0) {
       rowCount -= 1;
@@ -317,8 +319,15 @@
 
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       const isOffset = rowIndex % 2 === 1;
-      const count = isOffset ? fullColumns - 1 : fullColumns;
-      const start = metrics.pegLeft + (isOffset ? fullGap / 2 : 0);
+      const baseCount = isOffset ? fullColumns - 1 : fullColumns;
+      const baseStart = metrics.pegLeft + (isOffset ? fullGap / 2 : 0);
+      const rowProgress = clamp(rowIndex / shoulderRows, 0, 1);
+      const keepRatio = lerp(topKeepRatio, 1, smoothstep(rowProgress));
+      const keepCount = Math.max(7, Math.round(baseCount * keepRatio));
+      const parityAdjustedCount = keepCount % 2 === baseCount % 2 ? keepCount : keepCount + 1;
+      const count = Math.min(baseCount, parityAdjustedCount);
+      const trim = Math.floor((baseCount - count) / 2);
+      const start = baseStart + trim * fullGap;
 
       rows.push({
         count,
@@ -471,130 +480,6 @@
     });
 
     return trace;
-  }
-
-  function simulateBallTrace(options, attempt) {
-    const width = state.view.width;
-    const height = state.view.height;
-    const metrics = boardMetrics(width, height);
-    const risk = physicsByRisk[options.risk];
-    const pegs = createPegs(width, height);
-    const rng = seededRandom((options.seed + attempt * 2654435761) >>> 0);
-    const launchX = launchXForSide(options.side, metrics);
-    const targetX = slotCenterX(options.targetPocket, metrics);
-    const scan = ((attempt % 13) - 6) / 6;
-    const band = Math.floor(attempt / 13) % 5;
-    const ball = {
-      x: launchX,
-      y: metrics.gateY + options.queueOffset + options.verticalJitter,
-      vx: (targetX - launchX) * 0.42 + scan * width * (0.09 + band * 0.025) + (rng() - 0.5) * width * 0.04,
-      vy: height * (0.035 + rng() * 0.03),
-      r: metrics.ballRadius,
-      chutePocket: null
-    };
-    const gravity = height * 0.82;
-    const dt = 1 / 90;
-    const trace = [{ x: ball.x, y: ball.y, t: 0 }];
-    let settledPocket = 7;
-    let time = 0;
-
-    for (let step = 1; step <= 360; step += 1) {
-      time += dt;
-      ball.vy += gravity * dt;
-      ball.vx *= risk.drag;
-      ball.vy *= 0.999;
-      ball.x += ball.vx * dt;
-      ball.y += ball.vy * dt;
-
-      if (ball.x < metrics.left + ball.r) {
-        ball.x = metrics.left + ball.r;
-        ball.vx = Math.abs(ball.vx) * risk.restitution;
-      }
-
-      if (ball.x > metrics.right - ball.r) {
-        ball.x = metrics.right - ball.r;
-        ball.vx = -Math.abs(ball.vx) * risk.restitution;
-      }
-
-      if (ball.y < metrics.top + ball.r) {
-        ball.y = metrics.top + ball.r;
-        ball.vy = Math.abs(ball.vy) * risk.restitution;
-      }
-
-      pegs.forEach(function (peg, pegIndex) {
-        const minDist = ball.r + peg.r;
-        const dx = ball.x - peg.x;
-        const dy = ball.y - peg.y;
-
-        if (Math.abs(dx) > minDist || Math.abs(dy) > minDist) {
-          return;
-        }
-
-        const dist = Math.hypot(dx, dy);
-        if (!dist || dist >= minDist) {
-          return;
-        }
-
-        const nx = dx / dist;
-        const ny = dy / dist;
-        const overlap = minDist - dist;
-        const velocityAlongNormal = ball.vx * nx + ball.vy * ny;
-
-        ball.x += nx * overlap;
-        ball.y += ny * overlap;
-
-        if (velocityAlongNormal < 0) {
-          ball.vx -= (1 + risk.restitution) * velocityAlongNormal * nx;
-          ball.vy -= (1 + risk.restitution) * velocityAlongNormal * ny;
-        }
-
-        ball.vx += ny * (rng() - 0.5) * risk.pegKick;
-        ball.vx += ((pegIndex % 2 === 0) ? 1 : -1) * risk.pegKick * 0.05;
-        ball.vy -= Math.abs(nx) * risk.pegKick * 0.04;
-        ball.vx *= 0.98;
-        ball.vy *= 0.96;
-      });
-
-      if (ball.y >= metrics.chuteTop && ball.chutePocket === null) {
-        ball.chutePocket = pocketFromX(ball.x, metrics);
-      }
-
-      if (ball.chutePocket !== null) {
-        const wallWidth = clamp(metrics.slotStep * 0.055, 3, 6);
-        const leftLimit = ball.chutePocket * metrics.slotStep + wallWidth / 2 + ball.r;
-        const rightLimit = (ball.chutePocket + 1) * metrics.slotStep - wallWidth / 2 - ball.r;
-
-        if (ball.x < leftLimit) {
-          ball.x = leftLimit;
-          ball.vx = Math.abs(ball.vx) * 0.28;
-        }
-
-        if (ball.x > rightLimit) {
-          ball.x = rightLimit;
-          ball.vx = -Math.abs(ball.vx) * 0.28;
-        }
-      }
-
-      if (step % 2 === 0) {
-        trace.push({ x: ball.x, y: ball.y, t: time });
-      }
-
-      if (ball.y >= metrics.slotY) {
-        settledPocket = ball.chutePocket === null ? pocketFromX(ball.x, metrics) : ball.chutePocket;
-        trace.push({
-          x: slotCenterX(settledPocket, metrics),
-          y: metrics.slotY - ball.r * 0.1,
-          t: time
-        });
-        break;
-      }
-    }
-
-    return {
-      pocket: settledPocket,
-      trace,
-      score: Math.abs(settledPocket - options.targetPocket)
-    };
   }
 
   function updateDisplay() {
