@@ -379,6 +379,100 @@
     return clamp(Math.floor(x / metrics.slotStep), 0, metrics.pocketCount - 1);
   }
 
+  function rowDeflectionX(row, desiredX, clearance) {
+    const pegIndex = clamp(Math.round((desiredX - row.start) / row.gap), 0, row.count - 1);
+    const pegX = row.start + row.gap * pegIndex;
+    const leftX = pegX - clearance;
+    const rightX = pegX + clearance;
+
+    return Math.abs(desiredX - leftX) < Math.abs(desiredX - rightX) ? leftX : rightX;
+  }
+
+  function buildDropTrace(options) {
+    const width = state.view.width;
+    const height = state.view.height;
+    const metrics = boardMetrics(width, height);
+    const rows = pegRows(width, height);
+    const rng = seededRandom(options.seed);
+    const launchX = launchXForSide(options.side, metrics);
+    const targetX = slotCenterX(options.targetPocket, metrics);
+    const profile = {
+      low: { maxStep: 0.62, wobble: 0.16, rowTime: 0.18 },
+      medium: { maxStep: 0.74, wobble: 0.24, rowTime: 0.17 },
+      high: { maxStep: 0.9, wobble: 0.34, rowTime: 0.16 }
+    }[options.risk] || { maxStep: 0.74, wobble: 0.24, rowTime: 0.17 };
+    const clearance = metrics.pegRadius + metrics.ballRadius * 0.9;
+    const pocketLeft = options.targetPocket * metrics.slotStep + metrics.ballRadius * 1.35;
+    const pocketRight = (options.targetPocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35;
+    const trace = [{
+      x: launchX,
+      y: metrics.gateY + options.queueOffset + options.verticalJitter,
+      t: 0
+    }];
+    let x = launchX;
+    let time = 0;
+
+    rows.forEach(function (row, rowIndex) {
+      const progress = (rowIndex + 1) / (rows.length + 1);
+      const steer = smoothstep(progress);
+      const wobble = (rng() - 0.5) * metrics.slotStep * profile.wobble * (1 - steer);
+      const desiredX = lerp(launchX, targetX, steer) + wobble;
+      const maxStep = metrics.slotStep * profile.maxStep;
+      const guidedX = clamp(desiredX, x - maxStep, x + maxStep);
+      const hitX = clamp(
+        rowDeflectionX(row, guidedX, clearance),
+        metrics.left + metrics.ballRadius,
+        metrics.right - metrics.ballRadius
+      );
+      const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
+      const rowTime = profile.rowTime + rng() * 0.045;
+      const aboveY = row.y - metrics.pegRadius * 2.3;
+      const exitY = row.y + metrics.pegRadius * 2.4;
+      const exitX = clamp(
+        boundedHitX + (targetX - boundedHitX) * 0.08 + (rng() - 0.5) * metrics.slotStep * 0.06,
+        metrics.left + metrics.ballRadius,
+        metrics.right - metrics.ballRadius
+      );
+
+      time += rowTime * 0.36;
+      trace.push({ x: lerp(x, boundedHitX, 0.55), y: aboveY, t: time });
+      time += rowTime * 0.28;
+      trace.push({ x: boundedHitX, y: row.y, t: time });
+      time += rowTime * 0.36;
+      trace.push({ x: exitX, y: exitY, t: time });
+      x = exitX;
+    });
+
+    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.16, pocketLeft, pocketRight);
+
+    time += 0.22;
+    trace.push({
+      x: lerp(x, chuteX, 0.7),
+      y: metrics.chuteTop - metrics.ballRadius * 1.5,
+      t: time
+    });
+    time += 0.18;
+    trace.push({
+      x: chuteX,
+      y: metrics.chuteTop + metrics.ballRadius * 1.8,
+      t: time
+    });
+    time += 0.3;
+    trace.push({
+      x: lerp(chuteX, targetX, 0.45),
+      y: lerp(metrics.chuteTop, metrics.slotY, 0.56),
+      t: time
+    });
+    time += 0.34;
+    trace.push({
+      x: targetX,
+      y: metrics.slotY - metrics.ballRadius * 0.1,
+      t: time
+    });
+
+    return trace;
+  }
+
   function simulateBallTrace(options, attempt) {
     const width = state.view.width;
     const height = state.view.height;
@@ -501,49 +595,6 @@
       trace,
       score: Math.abs(settledPocket - options.targetPocket)
     };
-  }
-
-  function solveBallTrace(options) {
-    let best = null;
-
-    const maxAttempts = options.totalBalls > 60 ? 24 : options.totalBalls > 20 ? 38 : 78;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const result = simulateBallTrace(options, attempt);
-
-      if (result.pocket === options.targetPocket) {
-        return result.trace;
-      }
-
-      if (!best || result.score < best.score) {
-        best = result;
-      }
-    }
-
-    return retargetTrace(best.trace, options.targetPocket);
-  }
-
-  function retargetTrace(trace, targetPocket) {
-    const metrics = boardMetrics(state.view.width, state.view.height);
-    const targetX = slotCenterX(targetPocket, metrics);
-    const startIndex = Math.max(1, Math.floor(trace.length * 0.82));
-
-    for (let index = startIndex; index < trace.length; index += 1) {
-      const progress = smoothstep((index - startIndex) / Math.max(1, trace.length - startIndex - 1));
-      trace[index] = {
-        x: lerp(trace[index].x, targetX, progress),
-        y: trace[index].y,
-        t: trace[index].t
-      };
-    }
-
-    trace[trace.length - 1] = {
-      x: targetX,
-      y: metrics.slotY - metrics.ballRadius * 0.1,
-      t: trace[trace.length - 1].t
-    };
-
-    return trace;
   }
 
   function updateDisplay() {
@@ -737,6 +788,7 @@
 
   function drawBalls(width, height) {
     const balls = state.animation ? state.animation.balls : state.restingBalls;
+    const frameTime = state.animation ? state.animation.frameTime || 0 : 0;
     if (!balls.length) {
       return;
     }
@@ -747,7 +799,10 @@
       }
 
       if (!ball.active && !ball.settled) {
-        drawQueuedBall(ball, width, height);
+        if (frameTime && ball.spawnAt - frameTime <= 130) {
+          drawQueuedBall(ball, width, height);
+        }
+
         return;
       }
 
@@ -825,8 +880,8 @@
     const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
       ? Number(resolved.multiplier)
       : stripSlots()[targetPocket];
-    const spawnDelay = total > 60 ? 26 : total > 30 ? 38 : total > 10 ? 58 : 110;
-    const trace = solveBallTrace({
+    const spawnDelay = total > 60 ? 55 : total > 30 ? 70 : total > 10 ? 90 : 150;
+    const trace = buildDropTrace({
       side,
       targetPocket,
       ballIndex: index,
@@ -837,7 +892,7 @@
       seed: randomSeed()
     });
     const start = trace[0];
-    const duration = Math.max(1800, trace[trace.length - 1].t * 2400);
+    const duration = Math.max(1900, trace[trace.length - 1].t * 1000);
 
     return {
       id: index,
@@ -872,6 +927,7 @@
       animation.lastTime = timestamp;
     }
 
+    animation.frameTime = timestamp;
     animation.lastTime = timestamp;
 
     animation.balls.forEach(function (ball) {
@@ -909,7 +965,7 @@
 
     const current = trace[index];
     const next = trace[Math.min(trace.length - 1, index + 1)];
-    const local = next.t > current.t ? clamp((traceTime - current.t) / (next.t - current.t), 0, 1) : 1;
+    const local = next.t > current.t ? smoothstep(clamp((traceTime - current.t) / (next.t - current.t), 0, 1)) : 1;
     const nextX = lerp(current.x, next.x, local);
     const nextY = lerp(current.y, next.y, local);
     const dt = Math.max(0.016, (timestamp - (ball.lastPathTimestamp || timestamp - 16)) / 1000);
