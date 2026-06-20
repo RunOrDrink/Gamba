@@ -153,6 +153,18 @@
     return t * t * (3 - 2 * t);
   }
 
+  function traceEase(kind, t) {
+    if (kind === "fall") {
+      return t * t;
+    }
+
+    if (kind === "bounce") {
+      return 1 - Math.pow(1 - t, 2);
+    }
+
+    return t;
+  }
+
   function selectedWager() {
     const value = Number(wagerInput.value);
     if (!Number.isFinite(value)) {
@@ -402,15 +414,9 @@
     return clamp(Math.floor(x / metrics.slotStep), 0, metrics.pocketCount - 1);
   }
 
-  function rowDeflection(row, incomingX, desiredX, clearance) {
-    const approachX = lerp(incomingX, desiredX, 0.42);
-    const pegIndex = clamp(Math.round((approachX - row.start) / row.gap), 0, row.count - 1);
+  function rowDeflection(row, incomingX, side, clearance) {
+    const pegIndex = clamp(Math.round((incomingX - side * clearance * 0.7 - row.start) / row.gap), 0, row.count - 1);
     const pegX = row.start + row.gap * pegIndex;
-    let side = incomingX >= pegX ? 1 : -1;
-
-    if (Math.abs(incomingX - pegX) < clearance * 0.35) {
-      side = desiredX >= pegX ? 1 : -1;
-    }
 
     return {
       x: pegX + side * clearance,
@@ -428,10 +434,10 @@
     const launchX = launchXForSide(options.side, metrics);
     const targetX = slotCenterX(options.targetPocket, metrics);
     const profile = {
-      low: { maxStep: 0.56, wobble: 0.08, rowTime: 0.3, bounce: 0.2 },
-      medium: { maxStep: 0.66, wobble: 0.12, rowTime: 0.29, bounce: 0.27 },
-      high: { maxStep: 0.78, wobble: 0.17, rowTime: 0.27, bounce: 0.34 }
-    }[options.risk] || { maxStep: 0.66, wobble: 0.12, rowTime: 0.29, bounce: 0.27 };
+      low: { wobble: 0.04, rowTime: 0.32, bounce: 0.26 },
+      medium: { wobble: 0.06, rowTime: 0.3, bounce: 0.34 },
+      high: { wobble: 0.09, rowTime: 0.28, bounce: 0.42 }
+    }[options.risk] || { wobble: 0.06, rowTime: 0.3, bounce: 0.34 };
     const clearance = metrics.pegRadius + metrics.ballRadius * 0.9;
     const pocketLeft = options.targetPocket * metrics.slotStep + metrics.ballRadius * 1.35;
     const pocketRight = (options.targetPocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35;
@@ -447,88 +453,100 @@
       const firstRowY = rows[0].y;
       const drift = (rng() - 0.5) * metrics.slotStep * 0.025;
 
-      time += 0.48;
+      time += 0.16;
       trace.push({
         x: launchX,
-        y: lerp(metrics.gateY, firstRowY, 0.1),
-        t: time
+        y: lerp(metrics.gateY, firstRowY, 0.12),
+        t: time,
+        ease: "fall"
       });
-      time += 0.56;
+      time += 0.2;
       trace.push({
         x: launchX + drift * 0.18,
-        y: lerp(metrics.gateY, firstRowY, 0.34),
-        t: time
+        y: lerp(metrics.gateY, firstRowY, 0.45),
+        t: time,
+        ease: "fall"
       });
-      time += 0.62;
+      time += 0.26;
       trace.push({
         x: launchX + drift,
         y: firstRowY - metrics.pegRadius * 3.8,
-        t: time
+        t: time,
+        ease: "fall"
       });
       x = launchX + drift;
     }
 
     rows.forEach(function (row, rowIndex) {
       const progress = (rowIndex + 1) / (rows.length + 1);
-      const steer = smoothstep(clamp(progress * 1.28, 0, 1));
-      const settlePull = smoothstep(clamp((progress - 0.56) / 0.32, 0, 1));
-      const wobble = (rng() - 0.5) * metrics.slotStep * profile.wobble * Math.max(0, 1 - steer * 1.2);
-      const desiredX = lerp(launchX, targetX, steer) + wobble;
-      const maxStep = metrics.slotStep * profile.maxStep;
-      const guidedX = clamp(desiredX, x - maxStep, x + maxStep);
-      const impact = rowDeflection(row, x, guidedX, clearance);
+      const remainingRows = Math.max(1, rows.length - rowIndex - 1);
+      const remainingX = targetX - x;
+      const targetSide = remainingX >= 0 ? 1 : -1;
+      const maxNaturalReach = remainingRows * row.gap * (0.78 + profile.bounce * 0.4);
+      const urgency = clamp((Math.abs(remainingX) - maxNaturalReach * 0.42) / Math.max(row.gap, maxNaturalReach * 0.58), 0, 1);
+      const lateBias = smoothstep(clamp((progress - 0.66) / 0.24, 0, 1));
+      const targetBias = clamp(Math.abs(remainingX) / (metrics.slotStep * 4.8), 0, 0.28);
+      const chanceTowardTarget = clamp(0.5 + targetBias + urgency * 0.32 + lateBias * 0.16, 0.5, 0.96);
+      const forceTowardTarget = Math.abs(remainingX) > maxNaturalReach * 0.72 ||
+        (rowIndex > rows.length - 6 && Math.abs(remainingX) > metrics.slotStep * 0.38);
+      const side = forceTowardTarget || rng() < chanceTowardTarget ? targetSide : -targetSide;
+      const impact = rowDeflection(row, x, side, clearance);
       const hitX = clamp(
         impact.x,
         metrics.left + metrics.ballRadius,
         metrics.right - metrics.ballRadius
       );
+      const maxStep = row.gap * 1.35;
       const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
       const rowTime = (profile.rowTime + rng() * 0.07) * (rowIndex < 3 ? 1.55 : 1);
       const aboveY = row.y - metrics.pegRadius * 2.3;
       const exitY = row.y + metrics.pegRadius * 2.4;
-      const sameSideKick = impact.side * metrics.slotStep * profile.bounce * (1 - settlePull * 0.55);
-      const targetDrift = (targetX - boundedHitX) * (0.045 + settlePull * 0.28);
-      const exitDesiredX = boundedHitX + sameSideKick + targetDrift + (rng() - 0.5) * metrics.slotStep * 0.025;
+      const sameSideKick = impact.side * row.gap * profile.bounce;
+      const exitDesiredX = boundedHitX + sameSideKick + (rng() - 0.5) * row.gap * profile.wobble;
       const exitX = clamp(
         exitDesiredX,
-        Math.max(metrics.left + metrics.ballRadius, x - maxStep * 0.95),
-        Math.min(metrics.right - metrics.ballRadius, x + maxStep * 0.95)
+        Math.max(metrics.left + metrics.ballRadius, x - maxStep),
+        Math.min(metrics.right - metrics.ballRadius, x + maxStep)
       );
 
       time += rowTime * 0.36;
-      trace.push({ x: lerp(x, boundedHitX, 0.55), y: aboveY, t: time });
+      trace.push({ x: lerp(x, boundedHitX, 0.55), y: aboveY, t: time, ease: "fall" });
       time += rowTime * 0.28;
       trace.push({ x: boundedHitX, y: row.y, t: time });
       time += rowTime * 0.36;
-      trace.push({ x: exitX, y: exitY, t: time });
+      trace.push({ x: exitX, y: exitY, t: time, ease: "bounce" });
       x = exitX;
     });
 
-    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.1, pocketLeft, pocketRight);
+    const chuteX = clamp(x + clamp(targetX - x, -metrics.slotStep * 0.45, metrics.slotStep * 0.45), pocketLeft, pocketRight);
 
     time += 0.42;
     trace.push({
-      x: lerp(x, chuteX, 0.28),
+      x: lerp(x, chuteX, 0.18),
       y: metrics.chuteTop - metrics.ballRadius * 1.5,
-      t: time
+      t: time,
+      ease: "fall"
     });
     time += 0.38;
     trace.push({
-      x: lerp(x, chuteX, 0.58),
+      x: lerp(x, chuteX, 0.45),
       y: metrics.chuteTop + metrics.ballRadius * 1.8,
-      t: time
+      t: time,
+      ease: "fall"
     });
     time += 0.46;
     trace.push({
       x: lerp(chuteX, targetX, 0.55),
       y: lerp(metrics.chuteTop, metrics.slotY, 0.56),
-      t: time
+      t: time,
+      ease: "fall"
     });
     time += 0.48;
     trace.push({
       x: targetX,
       y: metrics.slotY - metrics.ballRadius * 0.1,
-      t: time
+      t: time,
+      ease: "fall"
     });
 
     return trace;
@@ -902,7 +920,8 @@
 
     const current = trace[index];
     const next = trace[Math.min(trace.length - 1, index + 1)];
-    const local = next.t > current.t ? smoothstep(clamp((traceTime - current.t) / (next.t - current.t), 0, 1)) : 1;
+    const rawLocal = next.t > current.t ? clamp((traceTime - current.t) / (next.t - current.t), 0, 1) : 1;
+    const local = traceEase(next.ease, rawLocal);
     const nextX = lerp(current.x, next.x, local);
     const nextY = lerp(current.y, next.y, local);
     const dt = Math.max(0.016, (timestamp - (ball.lastPathTimestamp || timestamp - 16)) / 1000);
