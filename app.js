@@ -45,17 +45,11 @@
     }
   };
 
-  const physicsByRisk = {
-    low: { spread: 0.04, restitution: 0.42, drag: 0.996, pegKick: 4 },
-    medium: { spread: 0.06, restitution: 0.5, drag: 0.997, pegKick: 6 },
-    high: { spread: 0.09, restitution: 0.58, drag: 0.998, pegKick: 8 }
-  };
-  const HONEYCOMB_COLUMNS = 21;
+  const HONEYCOMB_COLUMNS = 17;
   const TOP_ROW_EXTRA_EACH_SIDE = [0, 2, 2, 2, 1, 1];
   const WEIGHT_SCALE = 1000000;
   const MATTER_STATIC_CATEGORY = 0x0001;
   const MATTER_BALL_CATEGORY = 0x0002;
-  const physicsPlanCache = Object.create(null);
 
   const state = {
     balance: STARTING_BALANCE,
@@ -445,14 +439,14 @@
 
   function matterProfile(risk) {
     if (risk === "low") {
-      return { restitution: 0.62, pegRestitution: 0.72, friction: 0.006, frictionAir: 0.0018, gravityScale: 0.0019 };
+      return { restitution: 0.78, pegRestitution: 0.84, friction: 0.004, frictionAir: 0.0034, gravityScale: 0.0012 };
     }
 
     if (risk === "high") {
-      return { restitution: 0.78, pegRestitution: 0.86, friction: 0.003, frictionAir: 0.0011, gravityScale: 0.0021 };
+      return { restitution: 0.88, pegRestitution: 0.94, friction: 0.002, frictionAir: 0.0024, gravityScale: 0.00138 };
     }
 
-    return { restitution: 0.7, pegRestitution: 0.8, friction: 0.004, frictionAir: 0.0014, gravityScale: 0.002 };
+    return { restitution: 0.83, pegRestitution: 0.9, friction: 0.003, frictionAir: 0.0028, gravityScale: 0.0013 };
   }
 
   function matterStaticOptions(profile) {
@@ -524,7 +518,7 @@
       }
     });
     const stepMs = 1000 / 60;
-    const maxSteps = 620;
+    const maxSteps = 420;
     const trace = captureTrace ? [{ x: candidate.x, y: candidate.y, t: 0, ease: "fall" }] : null;
     let settled = false;
     let finalX = candidate.x;
@@ -572,7 +566,9 @@
         t: Math.max((trace[trace.length - 1] || { t: 0 }).t + 0.08, engine.timing.timestamp / 1000),
         ease: "fall"
       });
-      trace.durationMs = clamp(engine.timing.timestamp * 0.82, 2600, 7200);
+      trace.durationMs = clamp(engine.timing.timestamp * 0.78, 2300, 6200);
+      trace.settlePocket = pocket;
+      trace.settleX = settleX;
     }
 
     Matter.Composite.clear(engine.world, false);
@@ -586,21 +582,9 @@
     };
   }
 
-  function matterPlanKey(metrics, risk, side, targetPocket) {
-    return [
-      Math.round(metrics.width / 20) * 20,
-      Math.round(metrics.height / 20) * 20,
-      risk,
-      side,
-      targetPocket
-    ].join(":");
-  }
-
   function matterCandidate(index, rng, options, metrics) {
     const launchX = launchXForSide(options.side, metrics);
-    const targetX = slotCenterX(options.targetPocket, metrics);
-    const launchBias = clamp((targetX - launchX) / (metrics.width * 0.5), -1, 1);
-    const launchSpread = metrics.slotStep * 0.32;
+    const launchSpread = metrics.slotStep * 0.42;
     const controlledBias = index < 8 ? (index - 3.5) / 3.5 : rng() * 2 - 1;
     const randomBias = rng() * 2 - 1;
 
@@ -611,47 +595,15 @@
         metrics.right - metrics.ballRadius
       ),
       y: metrics.gateY + options.queueOffset + options.verticalJitter,
-      vx: launchBias * (0.95 + rng() * 0.8) + (rng() - 0.5) * 1.65,
-      vy: 0.08 + rng() * 0.22,
-      spin: (rng() - 0.5) * 0.08
+      vx: (rng() - 0.5) * 0.42,
+      vy: 0.02 + rng() * 0.06,
+      spin: (rng() - 0.5) * 0.035,
+      driftSeed: rng() * Math.PI * 2
     };
   }
 
   function chooseMatterPlan(options, metrics, profile, rng) {
-    const key = matterPlanKey(metrics, options.risk, options.side, options.targetPocket);
-    const cached = physicsPlanCache[key];
-
-    if (cached && cached.length) {
-      return cached[Math.floor(rng() * cached.length)];
-    }
-
-    const targetX = slotCenterX(options.targetPocket, metrics);
-    const exactPlans = [];
-    let bestPlan = null;
-    let bestScore = Infinity;
-
-    for (let index = 0; index < 96; index += 1) {
-      const candidate = matterCandidate(index, rng, options, metrics);
-      const result = runMatterCandidate(options, metrics, profile, candidate, false);
-      const score = Math.abs(result.pocket - options.targetPocket) * metrics.width +
-        Math.abs(result.finalX - targetX) +
-        Math.abs(candidate.vx) * 5;
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestPlan = candidate;
-      }
-
-      if (result.pocket === options.targetPocket) {
-        exactPlans.push(candidate);
-        if (exactPlans.length >= 4 && index > 24) {
-          break;
-        }
-      }
-    }
-
-    physicsPlanCache[key] = exactPlans.length ? exactPlans : [bestPlan || matterCandidate(0, rng, options, metrics)];
-    return physicsPlanCache[key][Math.floor(rng() * physicsPlanCache[key].length)];
+    return matterCandidate(0, rng, options, metrics);
   }
 
   function buildMatterDropTrace(options) {
@@ -669,7 +621,164 @@
   }
 
   function buildDropTrace(options) {
-    return buildMatterDropTrace(options) || buildPlannedDropTrace(options);
+    return buildPlannedDropTrace(options);
+  }
+
+  function createLiveMatterPhysics(width, height, risk) {
+    const metrics = boardMetrics(width, height);
+
+    return {
+      engine: createMatterEngine(metrics, matterProfile(risk)),
+      metrics,
+      profile: matterProfile(risk),
+      accumulator: 0,
+      lastTime: null
+    };
+  }
+
+  function createLiveMatterBody(ball, physics) {
+    const Matter = window.Matter;
+    const launch = ball.matterLaunch;
+    const body = Matter.Bodies.circle(launch.x, launch.y, ball.r, {
+      restitution: physics.profile.restitution,
+      friction: physics.profile.friction,
+      frictionStatic: 0,
+      frictionAir: physics.profile.frictionAir,
+      density: 0.001,
+      collisionFilter: {
+        category: MATTER_BALL_CATEGORY,
+        mask: MATTER_STATIC_CATEGORY
+      }
+    });
+
+    Matter.Body.setVelocity(body, { x: launch.vx, y: launch.vy });
+    Matter.Body.setAngularVelocity(body, launch.spin);
+    Matter.Composite.add(physics.engine.world, body);
+
+    ball.body = body;
+    ball.active = true;
+    ball.x = launch.x;
+    ball.y = launch.y;
+  }
+
+  function settleMatterBall(ball, animation) {
+    if (ball.settled) {
+      return;
+    }
+
+    const Matter = window.Matter;
+    const metrics = animation.physics.metrics;
+    const body = ball.body;
+    const pocket = pocketFromX(body.position.x, metrics);
+    const settleX = clamp(
+      body.position.x,
+      pocket * metrics.slotStep + ball.r * 1.35,
+      (pocket + 1) * metrics.slotStep - ball.r * 1.35
+    );
+    const multiplier = stripSlots()[pocket];
+
+    if (!ball.lockedPayout) {
+      ball.targetPocket = pocket;
+      ball.multiplier = multiplier;
+      ball.payout = roundMoney(ball.wager * multiplier);
+    }
+
+    ball.settled = true;
+    ball.pocket = ball.targetPocket;
+    ball.settleX = settleX;
+    ball.x = settleX;
+    ball.y = metrics.slotY - ball.r * 0.1;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.trail = [];
+
+    Matter.Composite.remove(animation.physics.engine.world, body);
+    ball.body = null;
+
+    state.lastPockets = animation.balls
+      .filter(function (candidate) {
+        return candidate.settled;
+      })
+      .map(function (candidate) {
+        return candidate.pocket;
+      });
+    renderStrip();
+  }
+
+  function applyNaturalDrift(ball, physics, timestamp) {
+    if (!ball.body || ball.settled) {
+      return;
+    }
+
+    const body = ball.body;
+    const metrics = physics.metrics;
+
+    if (body.position.y < metrics.playTop || body.position.y > metrics.playBottom) {
+      return;
+    }
+
+    const dx = clamp((ball.driftTargetX - body.position.x) / metrics.width, -0.7, 0.7);
+    const progress = clamp((body.position.y - metrics.playTop) / Math.max(1, metrics.playBottom - metrics.playTop), 0, 1);
+    const fade = 1 - smoothstep(clamp((progress - 0.72) / 0.28, 0, 1));
+    const wobble = Math.sin(timestamp * 0.004 + ball.driftSeed) * 0.28;
+    const forceX = body.mass * 0.00012 * ball.driftStrength * fade * (dx + wobble * 0.12);
+
+    window.Matter.Body.applyForce(body, body.position, {
+      x: forceX,
+      y: 0
+    });
+  }
+
+  function stepLiveMatterPhysics(animation, timestamp) {
+    const physics = animation.physics;
+    const stepMs = 1000 / 60;
+
+    if (!physics.lastTime) {
+      physics.lastTime = timestamp;
+    }
+
+    animation.frameTime = timestamp;
+
+    animation.balls.forEach(function (ball) {
+      if (!ball.active && !ball.settled && timestamp >= ball.spawnAt) {
+        createLiveMatterBody(ball, physics);
+      }
+
+      if (ball.active && !ball.settled) {
+        applyNaturalDrift(ball, physics, timestamp);
+      }
+    });
+
+    physics.accumulator += clamp(timestamp - physics.lastTime, 0, 50);
+    physics.lastTime = timestamp;
+
+    while (physics.accumulator >= stepMs) {
+      window.Matter.Engine.update(physics.engine, stepMs);
+      physics.accumulator -= stepMs;
+    }
+
+    animation.balls.forEach(function (ball) {
+      if (!ball.active || ball.settled || !ball.body) {
+        return;
+      }
+
+      ball.x = ball.body.position.x;
+      ball.y = ball.body.position.y;
+      ball.vx = ball.body.velocity.x;
+      ball.vy = ball.body.velocity.y;
+
+      ball.trail.push({ x: ball.x, y: ball.y });
+      if (ball.trail.length > 12) {
+        ball.trail.shift();
+      }
+
+      if (
+        ball.y >= physics.metrics.slotY - ball.r * 0.1 ||
+        (timestamp - ball.spawnAt > 9000 && ball.y > physics.metrics.playBottom)
+      ) {
+        settleMatterBall(ball, animation);
+      }
+    });
   }
 
   function plannedRowStep(row, x, side, metrics, profile, clearance, noise) {
@@ -1089,8 +1198,8 @@
 
   function drawQueuedBall(ball, width, height) {
     const metrics = boardMetrics(width, height);
-    const x = launchXForSide(ball.side, metrics);
-    const y = metrics.gateY + ball.queueOffset;
+    const x = ball.matterLaunch ? ball.matterLaunch.x : launchXForSide(ball.side, metrics);
+    const y = ball.matterLaunch ? ball.matterLaunch.y : metrics.gateY + ball.queueOffset;
 
     ctx.save();
     ctx.globalAlpha = 0.25;
@@ -1146,17 +1255,13 @@
   function createBall(index, total, wager, side, now, targetTier, resolved) {
     const height = state.view.height;
     const metrics = boardMetrics(state.view.width, height);
-    const risk = physicsByRisk[state.risk];
     const queueOffset = 0;
     const verticalJitter = 0;
     const targetPocket = resolved && Number.isFinite(Number(resolved.pocket))
       ? Number(resolved.pocket)
       : targetPocketFromTier(targetTier);
-    const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
-      ? Number(resolved.multiplier)
-      : stripSlots()[targetPocket];
     const spawnDelay = total > 60 ? 75 : total > 30 ? 95 : total > 10 ? 125 : 180;
-    const trace = buildDropTrace({
+    const traceOptions = {
       side,
       targetPocket,
       ballIndex: index,
@@ -1165,9 +1270,18 @@
       verticalJitter,
       risk: state.risk,
       seed: randomSeed()
-    });
-    const start = trace[0];
-    const duration = trace.durationMs || Math.max(3200, trace[trace.length - 1].t * 1250);
+    };
+    const canUseLiveMatter = matterReady();
+    const matterLaunch = canUseLiveMatter
+      ? matterCandidate(index, seededRandom(traceOptions.seed), traceOptions, metrics)
+      : null;
+    const trace = canUseLiveMatter ? null : buildDropTrace(traceOptions);
+    const start = canUseLiveMatter ? matterLaunch : trace[0];
+    const displayPocket = targetPocket;
+    const multiplier = resolved && Number.isFinite(Number(resolved.multiplier))
+      ? Number(resolved.multiplier)
+      : stripSlots()[displayPocket];
+    const duration = trace ? trace.durationMs || Math.max(3200, trace[trace.length - 1].t * 1250) : 0;
 
     return {
       id: index,
@@ -1175,8 +1289,8 @@
       risk: state.risk,
       wager,
       targetTier,
-      targetPocket,
-      settleX: trace[trace.length - 1].x,
+      targetPocket: displayPocket,
+      settleX: trace && Number.isFinite(Number(trace.settleX)) ? Number(trace.settleX) : start.x,
       r: metrics.ballRadius,
       x: start.x,
       y: start.y,
@@ -1194,11 +1308,21 @@
       payout: resolved && Number.isFinite(Number(resolved.payout))
         ? roundMoney(Number(resolved.payout))
         : roundMoney(wager * multiplier),
+      lockedPayout: Boolean(resolved),
+      matterLaunch,
+      driftTargetX: slotCenterX(displayPocket, metrics),
+      driftSeed: matterLaunch ? matterLaunch.driftSeed : randomSeed(),
+      driftStrength: resolved ? 1 : 0.45,
       trail: []
     };
   }
 
   function stepPhysics(animation, timestamp) {
+    if (animation.physics) {
+      stepLiveMatterPhysics(animation, timestamp);
+      return;
+    }
+
     if (!animation.lastTime) {
       animation.lastTime = timestamp;
     }
@@ -1370,7 +1494,8 @@
       ballWager: wager,
       totalWager,
       startedAt: now,
-      lastTime: null
+      lastTime: null,
+      physics: matterReady() ? createLiveMatterPhysics(state.view.width, state.view.height, state.risk) : null
     };
 
     playButton.disabled = true;
@@ -1420,6 +1545,11 @@
       bestMultiplier,
       payout: totalPayout
     });
+
+    if (animation.physics && window.Matter) {
+      window.Matter.Composite.clear(animation.physics.engine.world, false);
+      window.Matter.Engine.clear(animation.physics.engine);
+    }
 
     state.restingBalls = [];
     state.animation = null;
@@ -1504,6 +1634,7 @@
       totalWager,
       startedAt: now,
       lastTime: null,
+      physics: matterReady() ? createLiveMatterPhysics(state.view.width, state.view.height, result.risk || state.risk) : null,
       live: true,
       paymentSignature: result.paymentSignature,
       payoutSignature
