@@ -53,6 +53,9 @@
   const HONEYCOMB_COLUMNS = 21;
   const TOP_ROW_EXTRA_EACH_SIDE = [0, 2, 2, 2, 1, 1];
   const WEIGHT_SCALE = 1000000;
+  const MATTER_STATIC_CATEGORY = 0x0001;
+  const MATTER_BALL_CATEGORY = 0x0002;
+  const physicsPlanCache = Object.create(null);
 
   const state = {
     balance: STARTING_BALANCE,
@@ -430,6 +433,245 @@
     };
   }
 
+  function matterReady() {
+    return Boolean(
+      window.Matter &&
+      window.Matter.Engine &&
+      window.Matter.Bodies &&
+      window.Matter.Body &&
+      window.Matter.Composite
+    );
+  }
+
+  function matterProfile(risk) {
+    if (risk === "low") {
+      return { restitution: 0.62, pegRestitution: 0.72, friction: 0.006, frictionAir: 0.0018, gravityScale: 0.0019 };
+    }
+
+    if (risk === "high") {
+      return { restitution: 0.78, pegRestitution: 0.86, friction: 0.003, frictionAir: 0.0011, gravityScale: 0.0021 };
+    }
+
+    return { restitution: 0.7, pegRestitution: 0.8, friction: 0.004, frictionAir: 0.0014, gravityScale: 0.002 };
+  }
+
+  function matterStaticOptions(profile) {
+    return {
+      isStatic: true,
+      restitution: profile.pegRestitution,
+      friction: 0.01,
+      frictionStatic: 0,
+      collisionFilter: {
+        category: MATTER_STATIC_CATEGORY,
+        mask: MATTER_BALL_CATEGORY
+      }
+    };
+  }
+
+  function createMatterEngine(metrics, profile) {
+    const Matter = window.Matter;
+    const engine = Matter.Engine.create({
+      enableSleeping: false
+    });
+    const staticOptions = matterStaticOptions(profile);
+    const wallWidth = clamp(metrics.slotStep * 0.035, 2, 4);
+    const floorY = metrics.slotY + metrics.ballRadius * 1.1;
+    const chuteHeight = Math.max(metrics.ballRadius * 3, floorY - metrics.chuteTop);
+    const walls = [
+      Matter.Bodies.rectangle(metrics.width / 2, floorY + wallWidth / 2, metrics.width + wallWidth * 2, wallWidth, staticOptions),
+      Matter.Bodies.rectangle(-wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, staticOptions),
+      Matter.Bodies.rectangle(metrics.width + wallWidth, metrics.height / 2, wallWidth * 2, metrics.height * 2, staticOptions)
+    ];
+
+    engine.gravity.x = 0;
+    engine.gravity.y = 1;
+    engine.gravity.scale = profile.gravityScale;
+    engine.positionIterations = 10;
+    engine.velocityIterations = 10;
+    engine.constraintIterations = 2;
+
+    createPegs(metrics.width, metrics.height).forEach(function (peg) {
+      walls.push(Matter.Bodies.circle(peg.x, peg.y, peg.r, staticOptions));
+    });
+
+    for (let index = 0; index <= metrics.pocketCount; index += 1) {
+      const x = metrics.slotStep * index;
+      walls.push(Matter.Bodies.rectangle(
+        x,
+        metrics.chuteTop + chuteHeight / 2,
+        wallWidth,
+        chuteHeight,
+        staticOptions
+      ));
+    }
+
+    Matter.Composite.add(engine.world, walls);
+    return engine;
+  }
+
+  function runMatterCandidate(options, metrics, profile, candidate, captureTrace) {
+    const Matter = window.Matter;
+    const engine = createMatterEngine(metrics, profile);
+    const ball = Matter.Bodies.circle(candidate.x, candidate.y, metrics.ballRadius, {
+      restitution: profile.restitution,
+      friction: profile.friction,
+      frictionStatic: 0,
+      frictionAir: profile.frictionAir,
+      density: 0.001,
+      collisionFilter: {
+        category: MATTER_BALL_CATEGORY,
+        mask: MATTER_STATIC_CATEGORY
+      }
+    });
+    const stepMs = 1000 / 60;
+    const maxSteps = 620;
+    const trace = captureTrace ? [{ x: candidate.x, y: candidate.y, t: 0, ease: "fall" }] : null;
+    let settled = false;
+    let finalX = candidate.x;
+    let finalY = candidate.y;
+
+    Matter.Body.setVelocity(ball, { x: candidate.vx, y: candidate.vy });
+    Matter.Body.setAngularVelocity(ball, candidate.spin);
+    Matter.Composite.add(engine.world, ball);
+
+    for (let step = 1; step <= maxSteps; step += 1) {
+      Matter.Engine.update(engine, stepMs);
+      finalX = ball.position.x;
+      finalY = ball.position.y;
+
+      if (captureTrace && step % 2 === 0) {
+        trace.push({
+          x: finalX,
+          y: finalY,
+          t: step * stepMs / 1000,
+          ease: "physics"
+        });
+      }
+
+      if (finalY >= metrics.slotY - metrics.ballRadius * 0.1) {
+        settled = true;
+        break;
+      }
+
+      if (finalY > metrics.height + metrics.ballRadius * 8) {
+        break;
+      }
+    }
+
+    const pocket = pocketFromX(finalX, metrics);
+    const settleX = clamp(
+      finalX,
+      pocket * metrics.slotStep + metrics.ballRadius * 1.35,
+      (pocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35
+    );
+
+    if (captureTrace) {
+      trace.push({
+        x: settleX,
+        y: metrics.slotY - metrics.ballRadius * 0.1,
+        t: Math.max((trace[trace.length - 1] || { t: 0 }).t + 0.08, engine.timing.timestamp / 1000),
+        ease: "fall"
+      });
+      trace.durationMs = clamp(engine.timing.timestamp * 0.82, 2600, 7200);
+    }
+
+    Matter.Composite.clear(engine.world, false);
+    Matter.Engine.clear(engine);
+
+    return {
+      pocket,
+      finalX: settleX,
+      settled,
+      trace
+    };
+  }
+
+  function matterPlanKey(metrics, risk, side, targetPocket) {
+    return [
+      Math.round(metrics.width / 20) * 20,
+      Math.round(metrics.height / 20) * 20,
+      risk,
+      side,
+      targetPocket
+    ].join(":");
+  }
+
+  function matterCandidate(index, rng, options, metrics) {
+    const launchX = launchXForSide(options.side, metrics);
+    const targetX = slotCenterX(options.targetPocket, metrics);
+    const launchBias = clamp((targetX - launchX) / (metrics.width * 0.5), -1, 1);
+    const launchSpread = metrics.slotStep * 0.32;
+    const controlledBias = index < 8 ? (index - 3.5) / 3.5 : rng() * 2 - 1;
+    const randomBias = rng() * 2 - 1;
+
+    return {
+      x: clamp(
+        launchX + controlledBias * launchSpread * 0.45 + randomBias * launchSpread * 0.18,
+        metrics.left + metrics.ballRadius,
+        metrics.right - metrics.ballRadius
+      ),
+      y: metrics.gateY + options.queueOffset + options.verticalJitter,
+      vx: launchBias * (0.95 + rng() * 0.8) + (rng() - 0.5) * 1.65,
+      vy: 0.08 + rng() * 0.22,
+      spin: (rng() - 0.5) * 0.08
+    };
+  }
+
+  function chooseMatterPlan(options, metrics, profile, rng) {
+    const key = matterPlanKey(metrics, options.risk, options.side, options.targetPocket);
+    const cached = physicsPlanCache[key];
+
+    if (cached && cached.length) {
+      return cached[Math.floor(rng() * cached.length)];
+    }
+
+    const targetX = slotCenterX(options.targetPocket, metrics);
+    const exactPlans = [];
+    let bestPlan = null;
+    let bestScore = Infinity;
+
+    for (let index = 0; index < 96; index += 1) {
+      const candidate = matterCandidate(index, rng, options, metrics);
+      const result = runMatterCandidate(options, metrics, profile, candidate, false);
+      const score = Math.abs(result.pocket - options.targetPocket) * metrics.width +
+        Math.abs(result.finalX - targetX) +
+        Math.abs(candidate.vx) * 5;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestPlan = candidate;
+      }
+
+      if (result.pocket === options.targetPocket) {
+        exactPlans.push(candidate);
+        if (exactPlans.length >= 4 && index > 24) {
+          break;
+        }
+      }
+    }
+
+    physicsPlanCache[key] = exactPlans.length ? exactPlans : [bestPlan || matterCandidate(0, rng, options, metrics)];
+    return physicsPlanCache[key][Math.floor(rng() * physicsPlanCache[key].length)];
+  }
+
+  function buildMatterDropTrace(options) {
+    if (!matterReady()) {
+      return null;
+    }
+
+    const metrics = boardMetrics(state.view.width, state.view.height);
+    const profile = matterProfile(options.risk);
+    const rng = seededRandom(options.seed);
+    const plan = chooseMatterPlan(options, metrics, profile, rng);
+    const result = runMatterCandidate(options, metrics, profile, plan, true);
+
+    return result.trace;
+  }
+
+  function buildDropTrace(options) {
+    return buildMatterDropTrace(options) || buildPlannedDropTrace(options);
+  }
+
   function plannedRowStep(row, x, side, metrics, profile, clearance, noise) {
     const impact = rowDeflection(row, x, side, clearance);
     const hitX = clamp(
@@ -525,7 +767,7 @@
     };
   }
 
-  function buildDropTrace(options) {
+  function buildPlannedDropTrace(options) {
     const width = state.view.width;
     const height = state.view.height;
     const metrics = boardMetrics(width, height);
@@ -905,8 +1147,7 @@
     const height = state.view.height;
     const metrics = boardMetrics(state.view.width, height);
     const risk = physicsByRisk[state.risk];
-    const queueSlots = Math.min(total, 12);
-    const queueOffset = (index % queueSlots - (queueSlots - 1) / 2) * metrics.ballRadius * 0.34;
+    const queueOffset = 0;
     const verticalJitter = 0;
     const targetPocket = resolved && Number.isFinite(Number(resolved.pocket))
       ? Number(resolved.pocket)
@@ -926,7 +1167,7 @@
       seed: randomSeed()
     });
     const start = trace[0];
-    const duration = Math.max(3200, trace[trace.length - 1].t * 1250);
+    const duration = trace.durationMs || Math.max(3200, trace[trace.length - 1].t * 1250);
 
     return {
       id: index,

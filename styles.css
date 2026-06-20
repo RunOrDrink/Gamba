@@ -362,9 +362,9 @@ canvas {
   display: grid;
   align-self: end;
   grid-template-columns: repeat(15, minmax(0, 1fr));
-  gap: 3px;
+  gap: 2px;
   width: min(100%, 1060px);
-  height: 24px;
+  height: 34px;
   margin-top: 0;
   min-width: 0;
 }
@@ -372,16 +372,16 @@ canvas {
 .pocket {
   display: grid;
   place-items: center;
-  height: 22px;
+  height: 32px;
   min-width: 0;
-  min-height: 22px;
+  min-height: 32px;
   margin-inline: 0;
   border: 1px solid rgba(244, 239, 227, 0.11);
   border-radius: 5px;
   background: rgba(244, 239, 227, 0.055);
   box-shadow: inset 0 1px 0 rgba(244, 239, 227, 0.06);
   color: var(--muted);
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   font-weight: 900;
   transition: transform 160ms ease, border-color 160ms ease, color 160ms ease, background 160ms ease;
 }
@@ -545,7 +545,7 @@ canvas {
   }
 
   .pocket {
-    min-height: 22px;
-    font-size: 0.6rem;
+    min-height: 30px;
+    font-size: 0.64rem;
   }
 }
