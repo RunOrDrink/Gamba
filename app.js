@@ -155,7 +155,7 @@
 
   function traceEase(kind, t) {
     if (kind === "fall") {
-      return t * t;
+      return t;
     }
 
     if (kind === "bounce") {
@@ -299,10 +299,10 @@
     const minSide = Math.min(width, height);
     const pocketCount = 15;
     const slotStep = width / pocketCount;
-    const slotY = height - clamp(height * 0.018, 10, 16);
-    const chuteHeight = clamp(height * 0.062, 42, 68);
+    const slotY = height - clamp(height * 0.014, 8, 12);
+    const chuteHeight = clamp(height * 0.032, 22, 36);
     const chuteTop = slotY - chuteHeight;
-    const playBottom = chuteTop - clamp(height * 0.04, 26, 42);
+    const playBottom = chuteTop - clamp(height * 0.032, 20, 32);
 
     return {
       width,
@@ -439,10 +439,10 @@
     const launchX = launchXForSide(options.side, metrics);
     const targetX = slotCenterX(options.targetPocket, metrics);
     const profile = {
-      low: { wobble: 0.04, rowTime: 0.32, bounce: 0.26 },
-      medium: { wobble: 0.06, rowTime: 0.3, bounce: 0.34 },
-      high: { wobble: 0.09, rowTime: 0.28, bounce: 0.42 }
-    }[options.risk] || { wobble: 0.06, rowTime: 0.3, bounce: 0.34 };
+      low: { wobble: 0.04, rowTime: 0.27, bounce: 0.32 },
+      medium: { wobble: 0.06, rowTime: 0.25, bounce: 0.44 },
+      high: { wobble: 0.09, rowTime: 0.23, bounce: 0.56 }
+    }[options.risk] || { wobble: 0.06, rowTime: 0.25, bounce: 0.44 };
     const clearance = metrics.pegRadius + metrics.ballRadius * 0.9;
     const pocketLeft = options.targetPocket * metrics.slotStep + metrics.ballRadius * 1.35;
     const pocketRight = (options.targetPocket + 1) * metrics.slotStep - metrics.ballRadius * 1.35;
@@ -456,7 +456,6 @@
 
     if (rows.length) {
       const firstRowY = rows[0].y;
-      const drift = (rng() - 0.5) * metrics.slotStep * 0.025;
 
       time += 0.16;
       trace.push({
@@ -467,19 +466,19 @@
       });
       time += 0.2;
       trace.push({
-        x: launchX + drift * 0.18,
+        x: launchX,
         y: lerp(metrics.gateY, firstRowY, 0.45),
         t: time,
         ease: "fall"
       });
       time += 0.26;
       trace.push({
-        x: launchX + drift,
+        x: launchX,
         y: firstRowY - metrics.pegRadius * 3.8,
         t: time,
         ease: "fall"
       });
-      x = launchX + drift;
+      x = launchX;
     }
 
     rows.forEach(function (row, rowIndex) {
@@ -503,7 +502,7 @@
       );
       const maxStep = row.gap * 1.35;
       const boundedHitX = clamp(hitX, x - maxStep, x + maxStep);
-      const rowTime = (profile.rowTime + rng() * 0.07) * (rowIndex < 3 ? 1.55 : 1);
+      const rowTime = (profile.rowTime + rng() * 0.05) * (rowIndex < 3 ? 1.28 : 1);
       const aboveY = row.y - metrics.pegRadius * 2.3;
       const exitY = row.y + metrics.pegRadius * 2.4;
       const sameSideKick = impact.side * row.gap * profile.bounce;
@@ -523,30 +522,30 @@
       x = exitX;
     });
 
-    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.08, pocketLeft, pocketRight);
+    const chuteX = clamp(targetX + (rng() - 0.5) * metrics.slotStep * 0.04, pocketLeft, pocketRight);
 
-    time += 0.32;
+    time += 0.22;
     trace.push({
       x: chuteX,
-      y: metrics.chuteTop - metrics.ballRadius * 2.4,
+      y: metrics.chuteTop - metrics.ballRadius * 1.6,
       t: time,
       ease: "fall"
     });
-    time += 0.3;
+    time += 0.18;
     trace.push({
       x: chuteX,
-      y: metrics.chuteTop + metrics.ballRadius * 1.8,
+      y: metrics.chuteTop + metrics.ballRadius * 1.2,
       t: time,
       ease: "fall"
     });
-    time += 0.36;
+    time += 0.22;
     trace.push({
       x: clamp(lerp(chuteX, targetX, 0.55), pocketLeft, pocketRight),
       y: lerp(metrics.chuteTop, metrics.slotY, 0.56),
       t: time,
       ease: "fall"
     });
-    time += 0.34;
+    time += 0.22;
     trace.push({
       x: targetX,
       y: metrics.slotY - metrics.ballRadius * 0.1,
@@ -852,7 +851,7 @@
       seed: randomSeed()
     });
     const start = trace[0];
-    const duration = Math.max(4300, trace[trace.length - 1].t * 1550);
+    const duration = Math.max(3200, trace[trace.length - 1].t * 1250);
 
     return {
       id: index,
