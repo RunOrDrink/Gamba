@@ -488,11 +488,11 @@
       const targetSide = remainingX >= 0 ? 1 : -1;
       const maxNaturalReach = remainingRows * row.gap * (0.78 + profile.bounce * 0.4);
       const urgency = clamp((Math.abs(remainingX) - maxNaturalReach * 0.42) / Math.max(row.gap, maxNaturalReach * 0.58), 0, 1);
-      const lateBias = smoothstep(clamp((progress - 0.66) / 0.24, 0, 1));
+      const lateBias = smoothstep(clamp((progress - 0.52) / 0.34, 0, 1));
       const targetBias = clamp(Math.abs(remainingX) / (metrics.slotStep * 4.8), 0, 0.28);
-      const chanceTowardTarget = clamp(0.5 + targetBias + urgency * 0.32 + lateBias * 0.16, 0.5, 0.96);
+      const chanceTowardTarget = clamp(0.5 + targetBias + urgency * 0.28 + lateBias * 0.18, 0.5, 0.94);
       const forceTowardTarget = Math.abs(remainingX) > maxNaturalReach * 0.72 ||
-        (rowIndex > rows.length - 6 && Math.abs(remainingX) > metrics.slotStep * 0.38);
+        (rowIndex > rows.length - 9 && Math.abs(remainingX) > metrics.slotStep * 0.32);
       const side = forceTowardTarget || rng() < chanceTowardTarget ? targetSide : -targetSide;
       const impact = rowDeflection(row, x, side, clearance);
       const hitX = clamp(
@@ -832,7 +832,7 @@
     const risk = physicsByRisk[state.risk];
     const queueSlots = Math.min(total, 12);
     const queueOffset = (index % queueSlots - (queueSlots - 1) / 2) * metrics.ballRadius * 0.34;
-    const verticalJitter = (secureRandom() - 0.5) * height * risk.spread * 0.16;
+    const verticalJitter = 0;
     const targetPocket = resolved && Number.isFinite(Number(resolved.pocket))
       ? Number(resolved.pocket)
       : targetPocketFromTier(targetTier);
