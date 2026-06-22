@@ -745,21 +745,21 @@ const CONFIG = {
       color: "#22C55E",
       glow: "rgba(34,197,94,0.45)",
       multipliers: [16, 2.5, 1.5, 1.1, 0.8, 0.6, 0.4, 0.2, 0.4, 0.6, 0.8, 1.1, 1.5, 2.5, 16],
-      chances: [0.5, 0.35, 0.65, 1.5, 4.5, 8, 16, 37, 16, 8, 4.5, 1.5, 0.65, 0.35, 0.5]
+      chances: [0.5, 0.6, 1.4, 4, 8, 10, 15, 21, 15, 10, 8, 4, 1.4, 0.6, 0.5]
     },
     yellow: {
       label: "Yellow",
       color: "#F59E0B",
       glow: "rgba(245,158,11,0.45)",
       multipliers: [40, 8, 4, 2.2, 1.2, 0.7, 0.5, 0.2, 0.5, 0.7, 1.2, 2.2, 4, 8, 40],
-      chances: [0.05, 0.08, 0.2, 0.5, 1.2, 3.5, 8.92, 71.1, 8.92, 3.5, 1.2, 0.5, 0.2, 0.08, 0.05]
+      chances: [0.05, 0.12, 0.3, 0.8, 2.5, 7, 16, 46.46, 16, 7, 2.5, 0.8, 0.3, 0.12, 0.05]
     },
     red: {
       label: "Red",
       color: "#EF4444",
       glow: "rgba(239,68,68,0.48)",
       multipliers: [150, 20, 6, 2, 0.75, 0.2, 0.1, 0, 0.1, 0.2, 0.75, 2, 6, 20, 150],
-      chances: [0.005, 0.02, 0.1, 0.8, 2, 13.75, 24, 18.65, 24, 13.75, 2, 0.8, 0.1, 0.02, 0.005]
+      chances: [0.005, 0.04, 0.25, 2.5, 8, 13, 18, 16.41, 18, 13, 8, 2.5, 0.25, 0.04, 0.005]
     }
   },
   riskOrder: ["green", "yellow", "red"]
@@ -906,7 +906,7 @@ function calculateBoard() {
   const pocketHeight = width < 520 ? 30 : 38;
   const slotTop = slotBottom - pocketHeight;
   const rowGap = Math.min((slotTop - 58) / CONFIG.rows, (boardWidth / CONFIG.rows) * 0.72);
-  const pegGap = boardWidth / CONFIG.rows;
+  const pegGap = slotWidth;
   const lastPegY = slotTop - rowGap * 0.42;
   const top = lastPegY - (CONFIG.rows - 1) * rowGap;
   const pegRadius = clamp(pegGap * 0.105, 3.2, 5.2);
@@ -914,7 +914,7 @@ function calculateBoard() {
 
   const pegPositions = [];
   for (let row = 0; row < CONFIG.rows; row += 1) {
-    const count = row + 2;
+    const count = row + 1;
     const y = top + row * rowGap;
     const startX = centerX - ((count - 1) * pegGap) / 2;
 
@@ -965,6 +965,8 @@ function makePath(targetSlot, seed) {
   let previousMove = 0;
 
   for (let step = 1; step <= CONFIG.rows; step += 1) {
+    const pegY = m.top + (step - 1) * m.rowGap;
+    const pegX = m.centerX + (rights - (step - 1) / 2) * m.pegGap;
     const rowsLeftAfterThis = CONFIG.rows - step;
     const rightsStillNeeded = targetSlot - rights;
     let moveRight;
@@ -982,15 +984,30 @@ function makePath(targetSlot, seed) {
     rights += moveRight ? 1 : 0;
     previousMove = moveRight ? 1 : -1;
 
-    const driftIndex = rights - step / 2;
-    const laneX = m.centerX + driftIndex * m.slotWidth;
     const bounceSide = moveRight ? 1 : -1;
-    const bounceOffset = bounceSide * m.pegGap * (0.11 + random() * 0.08);
-    const jitter = (random() - 0.5) * m.pegGap * 0.08;
+    const contactClearance = m.ballRadius + m.pegRadius + 4.8;
+    const outerMin = m.left - m.slotWidth * 0.08;
+    const outerMax = m.left + m.boardWidth + m.slotWidth * 0.08;
+    const approachX = pegX + bounceSide * contactClearance * 0.58;
+    const approachY = pegY - contactClearance * 0.82;
+    const exitX = pegX + bounceSide * contactClearance * 0.9;
+    const exitY = pegY + contactClearance * 0.54;
+    const laneX = m.centerX + (rights - step / 2) * m.pegGap;
+    const laneJitter = (random() - 0.5) * m.pegGap * 0.07;
 
     points.push({
-      x: clamp(laneX + bounceOffset + jitter, m.left + m.slotWidth * 0.34, m.left + m.boardWidth - m.slotWidth * 0.34),
-      y: m.top + (step - 1) * m.rowGap + m.rowGap * 0.42
+      x: clamp(approachX, outerMin, outerMax),
+      y: approachY
+    });
+
+    points.push({
+      x: clamp(exitX, outerMin, outerMax),
+      y: exitY
+    });
+
+    points.push({
+      x: clamp(laneX + laneJitter, m.left + m.slotWidth * 0.28, m.left + m.boardWidth - m.slotWidth * 0.28),
+      y: pegY + m.rowGap * 0.62
     });
   }
 
@@ -1030,7 +1047,7 @@ function positionOnPath(path, t, wobbleSeed) {
   const length = Math.max(1, Math.hypot(dx, dy));
   const normalX = -dy / length;
   const normalY = dx / length;
-  const wobble = Math.sin(t * Math.PI * 34 + wobbleSeed) * (1 - t) * 3.3;
+  const wobble = Math.sin(t * Math.PI * 34 + wobbleSeed) * (1 - t) * 0.85;
 
   return {
     x: x + normalX * wobble,
