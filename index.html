@@ -976,9 +976,8 @@ function spawnBall(round, risk, wager, index) {
   const config = riskConfig(risk);
   const seed = Math.random() * 1000 + index * 0.113;
 
-  // Initialize coordinates properly immediately upon creation to prevent logic errors inside update loop
-  const startX = m.centerX + (Math.random() - 0.5) * m.pegGap * 0.15;
-  const startY = m.top - m.rowGap * 1.2;
+  const startX = m.centerX + (Math.random() - 0.5) * m.pegGap * 0.25;
+  const startY = m.top - m.rowGap * 1.5;
 
   state.balls.push({
     id: ballId,
@@ -988,7 +987,7 @@ function spawnBall(round, risk, wager, index) {
     color: config.color,
     x: startX,
     y: startY,
-    vx: (Math.random() - 0.5) * 0.5,
+    vx: (Math.random() - 0.5) * 0.4,
     vy: 0,
     position: { x: startX, y: startY },
     trail: [],
@@ -1052,18 +1051,18 @@ function updateBalls(now) {
   const m = state.metrics;
   if (!m) return;
 
-  const GRAVITY = 0.165;       
-  const FRICTION = 0.992;      
-  const BOUNCE = 0.58; 
+  const GRAVITY = 0.18;       
+  const FRICTION = 0.99;      
+  const BOUNCE = 0.42; 
 
   state.balls.forEach((ball) => {
     if (ball.settled) return;
 
     ball.vy += GRAVITY;
     
+    // Smooth out-of-center acceleration threshold
     const distanceFromCenter = ball.x - m.centerX;
-    const outwardPush = 0.0035; 
-    ball.vx += distanceFromCenter * outwardPush;
+    ball.vx += distanceFromCenter * 0.0008;
 
     ball.vx *= FRICTION;
     ball.vy *= FRICTION;
@@ -1085,13 +1084,17 @@ function updateBalls(now) {
       ball.vx = -ball.vx * BOUNCE;
     }
 
-    state.pegPositions.forEach((peg) => {
+    // Fixed single peg intersection loop
+    let hitPeg = null;
+    for (let i = 0; i < state.pegPositions.length; i++) {
+      const peg = state.pegPositions[i];
       const dx = ball.x - peg.x;
       const dy = ball.y - peg.y;
       const distance = Math.hypot(dx, dy);
       const minDist = m.ballRadius + m.pegRadius;
 
       if (distance < minDist) {
+        hitPeg = peg;
         const overlap = minDist - distance;
         const nx = dx / distance; 
         const ny = dy / distance; 
@@ -1103,15 +1106,17 @@ function updateBalls(now) {
         ball.vx = (ball.vx - 2 * dotProduct * nx) * BOUNCE;
         ball.vy = (ball.vy - 2 * dotProduct * ny) * BOUNCE;
 
-        ball.vx += (Math.random() - 0.5) * 0.65; 
-        ball.vy += Math.random() * 0.18;
-
-        if (ball.lastPegHit !== peg) {
-          ball.lastPegHit = peg;
-          addPegHit(peg.x, peg.y, ball.risk);
-        }
+        // Subtle side-deflection offset instead of random compounding speed additions
+        ball.vx += nx * 0.35 + (Math.random() - 0.5) * 0.25; 
+        ball.vy += Math.random() * 0.05;
+        break;
       }
-    });
+    }
+
+    if (hitPeg && ball.lastPegHit !== hitPeg) {
+      ball.lastPegHit = hitPeg;
+      addPegHit(hitPeg.x, hitPeg.y, ball.risk);
+    }
 
     if (ball.y >= m.slotTop) {
       const relativeX = ball.x - m.left;
@@ -1150,8 +1155,8 @@ function addPegHit(x, y, risk) {
     state.particles.push({
       x: nearest.x,
       y: nearest.y,
-      vx: Math.cos(angle) * (0.5 + Math.random() * 0.9),
-      vy: Math.sin(angle) * (0.5 + Math.random() * 0.9),
+      vx: Math.cos(angle) * (0.4 + Math.random() * 0.6),
+      vy: Math.sin(angle) * (0.4 + Math.random() * 0.6),
       color: riskConfig(risk).color,
       life: 1
     });
