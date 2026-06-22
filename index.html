@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0f14" />
+    <title>Gamba Plinko</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">G</div>
+          <div>
+            <h1>Gamba Plinko</h1>
+            <p>Static GitHub Pages build</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button id="soundBtn" class="icon-btn" type="button" title="Sound">Sound</button>
+          <button id="statsBtn" class="icon-btn" type="button" title="Stats">Stats</button>
+          <div class="balance-card">
+            <span>Balance</span>
+            <strong><span id="balance">10000.00</span> GAMBA</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="layout">
+        <section class="board-panel">
+          <div class="board-head">
+            <div>
+              <span class="label">Active risks</span>
+              <div id="activeRisks" class="active-risks"></div>
+            </div>
+            <div class="board-stats">
+              <div><span>Last</span><strong id="lastResult">Ready</strong></div>
+              <div><span>Profit</span><strong id="profit">0.00 GAMBA</strong></div>
+            </div>
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas id="boardCanvas"></canvas>
+            <div id="multiplierGrid" class="multiplier-grid"></div>
+          </div>
+        </section>
+
+        <aside class="recent-panel">
+          <div class="panel-title">
+            <h2>Recent rounds</h2>
+            <span id="roundCount">0</span>
+          </div>
+          <div id="recentList" class="recent-list">
+            <p class="muted">No rounds yet.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="controls">
+        <div class="control-card">
+          <label for="betInput">Bet per circle</label>
+          <div class="input-row">
+            <button id="betMinus" type="button">-</button>
+            <input id="betInput" type="number" min="1" step="1" value="10" />
+            <button id="betPlus" type="button">+</button>
+          </div>
+          <div class="quick-row">
+            <button id="halfBet" type="button">Half</button>
+            <button id="doubleBet" type="button">Double</button>
+            <button id="maxBet" type="button">Max</button>
+          </div>
+        </div>
+
+        <div class="control-card">
+          <label for="ballInput">Circles</label>
+          <div class="input-row">
+            <button id="ballMinus" type="button">-</button>
+            <input id="ballInput" type="number" min="1" max="100" step="1" value="1" />
+            <button id="ballPlus" type="button">+</button>
+          </div>
+          <p class="hint">Up to 100 per drop</p>
+        </div>
+
+        <div class="risk-card">
+          <button class="risk-btn green active" data-risk="green" type="button">
+            <span>Green</span>
+            <small>60% RTP</small>
+          </button>
+          <button class="risk-btn yellow" data-risk="yellow" type="button">
+            <span>Yellow</span>
+            <small>40% RTP</small>
+          </button>
+          <button class="risk-btn red" data-risk="red" type="button">
+            <span>Red</span>
+            <small>20% RTP</small>
+          </button>
+        </div>
+
+        <div class="launch-card">
+          <button id="turboBtn" class="secondary-btn" type="button">Turbo off</button>
+          <button id="dropBtn" class="drop-btn" type="button">Drop</button>
+          <button id="resetBtn" class="secondary-btn" type="button">Reset demo</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="statsDialog" class="stats-dialog">
+      <div class="dialog-head">
+        <h2>Statistics</h2>
+        <button id="closeStats" type="button">Close</button>
+      </div>
+      <div id="statsGrid" class="stats-grid"></div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
