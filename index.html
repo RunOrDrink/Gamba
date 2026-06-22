@@ -765,23 +765,23 @@ const CONFIG = {
     green: {
       label: "Green",
       color: "#22C55E",
-      glow: "rgba(34,197,94,0.45)",
-      multipliers: [16, 8, 4, 2, 1.5, 1, 0.6, 0.2, 0.6, 1, 1.5, 2, 4, 8, 16],
-      chances: [1, 2, 3, 5, 8, 10, 10, 22, 10, 10, 8, 5, 3, 2, 1]
+      glow: "rgba(34,197,94,0.3)",
+      multipliers: [12, 5, 3, 1.4, 1.1, 0.5, 0.3, 0.2, 0.3, 0.5, 1.1, 1.4, 3, 5, 12],
+      chances: [0.5, 1, 2, 4, 8, 12, 14, 17, 14, 12, 8, 4, 2, 1, 0.5]
     },
     yellow: {
       label: "Yellow",
       color: "#F59E0B",
-      glow: "rgba(245,158,11,0.45)",
-      multipliers: [60, 15, 8, 4, 2, 1, 0.3, 0, 0.3, 1, 2, 4, 8, 15, 60],
-      chances: [0.1, 0.2, 1, 2, 4, 8, 16, 37.4, 16, 8, 4, 2, 1, 0.2, 0.1]
+      glow: "rgba(245,158,11,0.3)",
+      multipliers: [35, 11, 6, 3, 1.2, 0.7, 0.2, 0, 0.2, 0.7, 1.2, 3, 6, 11, 35],
+      chances: [0.15, 0.35, 0.75, 1.5, 4, 8, 15, 40.5, 15, 8, 4, 1.5, 0.75, 0.35, 0.15]
     },
     red: {
       label: "Red",
       color: "#EF4444",
-      glow: "rgba(239,68,68,0.48)",
-      multipliers: [300, 80, 25, 10, 3, 1, 0.2, 0, 0.2, 1, 3, 10, 25, 80, 300],
-      chances: [0.01, 0.02, 1, 2, 4, 8, 16, 37.94, 16, 8, 4, 2, 1, 0.02, 0.01]
+      glow: "rgba(239,68,68,0.3)",
+      multipliers: [150, 45, 18, 7, 2, 0.5, 0.1, 0, 0.1, 0.5, 2, 7, 18, 45, 150],
+      chances: [0.01, 0.03, 0.08, 0.3, 1.2, 5, 16, 54.76, 16, 5, 1.2, 0.3, 0.08, 0.03, 0.01]
     }
   },
   riskOrder: ["green", "yellow", "red"]
@@ -873,6 +873,49 @@ function riskConfig(risk) {
   return CONFIG.risks[risk];
 }
 
+function chooseWeightedSlot(risk) {
+  const chances = riskConfig(risk).chances;
+  let cursor = Math.random() * 100;
+
+  for (let index = 0; index < chances.length; index += 1) {
+    cursor -= chances[index];
+    if (cursor <= 0) return index;
+  }
+
+  return chances.length - 1;
+}
+
+function makeBounceRoute(targetSlot) {
+  const route = [];
+  let rightsRemaining = targetSlot;
+  let previous = 0;
+  let streak = 0;
+
+  for (let row = 0; row < CONFIG.rows; row += 1) {
+    const rowsRemaining = CONFIG.rows - row;
+    let goRight;
+
+    if (rightsRemaining <= 0) {
+      goRight = false;
+    } else if (rightsRemaining >= rowsRemaining) {
+      goRight = true;
+    } else {
+      const pressure = rightsRemaining / rowsRemaining;
+      const antiStreak = streak >= 2 ? (previous > 0 ? -0.22 : 0.22) : 0;
+      goRight = Math.random() < clamp(pressure + antiStreak, 0.08, 0.92);
+    }
+
+    const direction = goRight ? 1 : -1;
+    route.push(direction);
+    if (goRight) rightsRemaining -= 1;
+
+    streak = direction === previous ? streak + 1 : 1;
+    previous = direction;
+  }
+
+  return route;
+}
+
 function normalizeBallCount(value) {
   const riskCount = state.activeRisks.length || 1;
   let count = Math.round(clamp(Number(value) || 1, riskCount, CONFIG.maxBalls));
@@ -918,7 +961,7 @@ function calculateBoard() {
   const lastPegY = slotTop - rowGap * 0.36;
   const top = lastPegY - (CONFIG.rows - 1) * rowGap;
   const pegRadius = clamp(pegGap * 0.112, 4.0, 6.8);
-  const ballRadius = clamp(pegGap * 0.24, 10, 14.5);
+  const ballRadius = clamp(pegGap * 0.31, 13, 18);
 
   const pegPositions = [];
   for (let row = 0; row < CONFIG.rows; row += 1) {
@@ -996,16 +1039,21 @@ function launchRound() {
 function spawnBall(round, risk, wager, index) {
   const m = state.metrics;
   const config = riskConfig(risk);
-  const side = index % 2 === 0 ? -1 : 1;
-  const startX = m.centerX + side * (m.pegGap * 0.07 + Math.random() * m.pegGap * 0.08);
+  const targetSlot = chooseWeightedSlot(risk);
+  const bounceRoute = makeBounceRoute(targetSlot);
+  const direction = bounceRoute[0] || (index % 2 === 0 ? -1 : 1);
+  const startX = m.centerX + direction * (m.pegGap * 0.05 + Math.random() * m.pegGap * 0.07);
   const startY = m.top - m.rowGap * 1.25;
-  const vx = side * (0.12 + Math.random() * 0.16);
+  const vx = direction * (0.08 + Math.random() * 0.14);
   const vy = 0.1 + Math.random() * 0.12;
 
   state.balls.push({
     id: ballId,
     round,
     risk,
+    targetSlot,
+    bounceRoute,
+    routeRows: Object.create(null),
     wager,
     color: config.color,
     x: startX,
@@ -1064,6 +1112,26 @@ function updateStats(stats, ball, win) {
   stats.highestMultiplier = Math.max(stats.highestMultiplier, ball.multiplier);
 }
 
+function applyRouteKick(ball, row, strength, pulse) {
+  if (!ball.bounceRoute || ball.routeRows[row]) return;
+
+  const direction = ball.bounceRoute[row] || 0;
+  ball.vx += direction * (0.32 + Math.random() * 0.18) * strength;
+  ball.vy += 0.03 * strength;
+  ball.routeRows[row] = true;
+
+  if (pulse) {
+    const peg = state.pegPositions
+      .filter((item) => item.row === row)
+      .reduce((best, item) => {
+        if (!best) return item;
+        return Math.abs(item.x - ball.x) < Math.abs(best.x - ball.x) ? item : best;
+      }, null);
+
+    if (peg) addPegHit(peg.x, peg.y, ball.risk);
+  }
+}
+
 function tick(now) {
   updateBalls(now);
   updateParticles(now);
@@ -1076,10 +1144,10 @@ function updateBalls(now) {
   if (!m) return;
 
   const GRAVITY = 0.18;
-  const RESTITUTION = 0.58;
-  const WALL_RESTITUTION = 0.38;
+  const RESTITUTION = 0.64;
+  const WALL_RESTITUTION = 0.28;
   const AIR_DRAG = 0.997;
-  const TANGENT_FRICTION = 0.985;
+  const TANGENT_FRICTION = 0.965;
   const MAX_SPEED = 7.8;
   const SUBSTEPS = 4;
   const COLLISION_SLOP = 0.04;
@@ -1102,12 +1170,15 @@ function updateBalls(now) {
       ball.x += ball.vx / SUBSTEPS;
       ball.y += ball.vy / SUBSTEPS;
 
-      if (ball.x - m.ballRadius < m.left) {
-        ball.x = m.left + m.ballRadius;
-        if (ball.vx < 0) ball.vx = -ball.vx * WALL_RESTITUTION;
-      } else if (ball.x + m.ballRadius > m.left + m.boardWidth) {
-        ball.x = m.left + m.boardWidth - m.ballRadius;
-        if (ball.vx > 0) ball.vx = -ball.vx * WALL_RESTITUTION;
+      const leftBound = m.left + m.ballRadius;
+      const rightBound = m.left + m.boardWidth - m.ballRadius;
+
+      if (ball.x < leftBound) {
+        ball.x = leftBound;
+        if (ball.vx < 0) ball.vx = Math.abs(ball.vx) * WALL_RESTITUTION + 0.16;
+      } else if (ball.x > rightBound) {
+        ball.x = rightBound;
+        if (ball.vx > 0) ball.vx = -Math.abs(ball.vx) * WALL_RESTITUTION - 0.16;
       }
 
       for (let pass = 0; pass < 2; pass += 1) {
@@ -1151,16 +1222,19 @@ function updateBalls(now) {
 
             ball.vx = nx * nextNormalVelocity + tx * nextTangentVelocity;
             ball.vy = ny * nextNormalVelocity + ty * nextTangentVelocity;
+            ball.vx += (Math.random() - 0.5) * 0.09;
 
             if (Math.abs(ball.vx) < 0.08) {
-              ball.vx += (Math.random() < 0.5 ? -1 : 1) * 0.18;
+              ball.vx += (Math.random() < 0.5 ? -1 : 1) * 0.24;
             } else {
-              ball.vx += (Math.random() - 0.5) * 0.045;
+              ball.vx += (Math.random() - 0.5) * 0.065;
             }
 
             if (ny < -0.72 && Math.abs(nx) < 0.34) {
-              ball.vx += (Math.random() < 0.5 ? -1 : 1) * (0.42 + Math.random() * 0.2);
+              ball.vx += (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.24);
             }
+
+            applyRouteKick(ball, peg.row, 1.12, false);
           }
 
           if (!ball.hitCooldowns[peg.id]) {
@@ -1171,6 +1245,12 @@ function updateBalls(now) {
       }
 
       if (ball.y >= m.slotTop) break;
+    }
+
+    const grazeRow = clamp(Math.round((ball.y - m.top) / m.rowGap), 0, CONFIG.rows - 1);
+    const grazeY = m.top + grazeRow * m.rowGap;
+    if (ball.y < m.slotTop && Math.abs(ball.y - grazeY) < m.rowGap * 0.38) {
+      applyRouteKick(ball, grazeRow, 0.62, true);
     }
 
     Object.keys(ball.hitCooldowns).forEach((id) => {
@@ -1195,12 +1275,21 @@ function updateBalls(now) {
       ball.stuckFrames = 0;
     }
 
+    const sideZone = m.slotWidth * 0.65;
+    const nearLeftSide = ball.x < m.left + sideZone;
+    const nearRightSide = ball.x > m.left + m.boardWidth - sideZone;
+    if (ball.y < m.slotTop - m.rowGap * 0.25 && (nearLeftSide || nearRightSide) && Math.abs(ball.vx) < 0.22) {
+      ball.vx += nearLeftSide ? 0.34 : -0.34;
+      ball.vy += 0.12;
+    }
+
     ball.lastX = ball.x;
     ball.lastY = ball.y;
 
     if (ball.y + m.ballRadius >= m.slotTop) {
       const relX = ball.x - m.left;
-      const slot = clamp(Math.floor(relX / m.slotWidth), 0, m.slotCount - 1);
+      const physicalSlot = clamp(Math.floor(relX / m.slotWidth), 0, m.slotCount - 1);
+      const slot = physicalSlot;
       ball.slot = slot;
       ball.multiplier = riskConfig(ball.risk).multipliers[slot];
       ball.payout = Math.round(ball.wager * ball.multiplier * 100) / 100;
