@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Gamba Plinko - Desktop Edition</title>
+    <title>Gamba Plinko - Refined Desktop Edition</title>
     <style>
 :root {
   --bg: #0b0f14;
@@ -16,7 +16,7 @@
   --yellow: #f59e0b;
   --red: #ef4444;
   --cyan: #06b6d4;
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -26,11 +26,10 @@
 }
 
 body {
-  width: 1280px;
-  height: 800px;
-  margin: 0 auto;
+  width: 100vw;
+  height: 100vh;
   background:
-    radial-gradient(circle at 50% -10%, rgba(6, 182, 212, 0.15), transparent 40%),
+    radial-gradient(circle at 50% -10%, rgba(6, 182, 212, 0.15), transparent 50%),
     var(--bg);
   color: var(--text);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -40,6 +39,7 @@ body {
 button, input {
   font: inherit;
   border: 0;
+  outline: none;
 }
 
 button {
@@ -54,15 +54,15 @@ button:disabled {
 .app {
   display: flex;
   flex-direction: column;
-  width: 1280px;
-  height: 800px;
-  padding: 20px;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
   gap: 20px;
 }
 
 .topbar, .board-panel, .recent-panel, .controls, .control-card, .risk-card, .launch-card, .stats-dialog {
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)), rgba(18, 24, 33, 0.85);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)), rgba(18, 24, 33, 0.85);
   box-shadow: var(--shadow);
   backdrop-filter: blur(20px);
   border-radius: 16px;
@@ -71,10 +71,11 @@ button:disabled {
 /* TOPBAR */
 .topbar {
   display: flex;
-  height: 70px;
+  height: 76px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 24px;
+  flex-shrink: 0;
 }
 
 .brand {
@@ -85,20 +86,21 @@ button:disabled {
 
 .brand-mark {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   place-items: center;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--emerald), var(--cyan));
   color: #04110a;
   font-weight: 900;
-  font-size: 1.4rem;
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.3);
+  font-size: 1.5rem;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.35);
 }
 
 .brand h1 {
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .brand p {
@@ -107,17 +109,18 @@ button:disabled {
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
+  margin-top: 1px;
 }
 
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .icon-btn, .secondary-btn, .input-row button, .quick-row button, .dialog-head button {
-  height: 42px;
-  padding: 0 16px;
+  height: 44px;
+  padding: 0 18px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
@@ -133,12 +136,12 @@ button:disabled {
 }
 
 .balance-card {
-  width: 180px;
-  height: 46px;
+  width: 200px;
+  height: 48px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 5px 14px;
   text-align: right;
 }
 
@@ -153,15 +156,15 @@ button:disabled {
 
 .balance-card strong, .board-stats strong {
   display: block;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
 }
 
 /* MAIN LAYOUT */
 .layout {
   display: flex;
-  width: 1240px;
-  height: 520px;
+  flex: 1;
+  min-height: 0;
   gap: 20px;
 }
 
@@ -170,14 +173,16 @@ button:disabled {
   display: flex;
   flex-direction: column;
   position: relative;
+  min-width: 0;
 }
 
 .board-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  height: 70px;
+  padding: 16px 24px;
+  height: 72px;
+  flex-shrink: 0;
 }
 
 .active-risks {
@@ -189,7 +194,7 @@ button:disabled {
 .risk-pill {
   border: 1px solid currentColor;
   border-radius: 20px;
-  padding: 2px 10px;
+  padding: 2px 12px;
   font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -201,19 +206,19 @@ button:disabled {
 }
 
 .board-stats div {
-  width: 150px;
+  width: 160px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.2);
-  padding: 6px 12px;
+  padding: 6px 14px;
   text-align: right;
 }
 
 .canvas-wrap {
   position: relative;
   width: 100%;
-  height: 430px;
-  overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 #boardCanvas {
@@ -225,48 +230,47 @@ button:disabled {
 .multiplier-grid {
   position: absolute;
   left: 0;
-  bottom: 12px;
+  bottom: 20px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   pointer-events: none;
 }
 
 .multiplier-row {
   display: flex;
-  gap: 2px;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
 }
 
 .multiplier-cell {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  height: 32px;
+  border-radius: 6px;
   color: #fff;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 800;
   transition: all 120ms ease;
-}
-
-.multiplier-cell.dim {
-  opacity: 0.25;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 6px rgba(0,0,0,0.2);
 }
 
 .multiplier-cell.hit {
-  transform: scale(1.05);
-  border-color: #fff;
-  box-shadow: 0 0 12px currentColor;
+  transform: scale(1.08) translateY(-4px);
+  box-shadow: 0 0 20px currentColor, 0 10px 15px rgba(0,0,0,0.4);
+  font-weight: 900;
 }
 
-/* SIDE PANEL */
+/* SIDE ROUNDS PANEL */
 .recent-panel {
-  width: 280px;
+  width: 320px;
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 20px;
+  flex-shrink: 0;
 }
 
 .panel-title {
@@ -274,14 +278,15 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 10px;
+  padding-bottom: 14px;
+  flex-shrink: 0;
 }
 
 .panel-title span {
   border-radius: 20px;
   background: rgba(34, 197, 94, 0.15);
   color: var(--green);
-  padding: 2px 8px;
+  padding: 3px 10px;
   font-weight: 800;
   font-size: 0.8rem;
 }
@@ -290,43 +295,47 @@ button:disabled {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
-  padding-top: 10px;
+  padding-top: 14px;
 }
 
 .recent-item {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
-  padding: 8px 12px;
+  padding: 10px 14px;
 }
 
 .recent-item strong {
   display: flex;
   justify-content: space-between;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 
 .recent-item p {
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
 }
 
 /* FOOTER CONTROLS */
 .controls {
   display: flex;
-  width: 1240px;
-  height: 130px;
-  padding: 14px;
-  gap: 14px;
+  width: 100%;
+  height: 140px;
+  padding: 16px;
+  gap: 16px;
+  flex-shrink: 0;
 }
 
 .control-card {
   flex: 1;
-  padding: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .input-row {
@@ -337,13 +346,14 @@ button:disabled {
 
 .input-row input {
   flex: 1;
-  height: 42px;
+  height: 44px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #06090e;
   color: var(--text);
   font-weight: 700;
   text-align: center;
+  font-size: 1rem;
 }
 
 .quick-row {
@@ -354,25 +364,25 @@ button:disabled {
 
 .quick-row button {
   flex: 1;
-  height: 28px;
+  height: 30px;
   font-size: 0.75rem;
   padding: 0;
 }
 
 .risk-card {
-  flex: 1.5;
+  flex: 1.4;
   display: flex;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .risk-btn {
   flex: 1;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--text);
-  opacity: 0.4;
+  opacity: 0.35;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -383,12 +393,14 @@ button:disabled {
 .risk-btn span {
   font-weight: 800;
   text-transform: uppercase;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
 }
 
 .risk-btn small {
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   color: var(--muted);
+  margin-top: 2px;
 }
 
 .risk-btn.active {
@@ -398,15 +410,18 @@ button:disabled {
 
 .risk-btn.green.active {
   border-color: var(--green);
-  background: linear-gradient(180deg, rgba(34,197,94,0.2), transparent);
+  background: linear-gradient(180deg, rgba(34,197,94,0.15), transparent);
+  box-shadow: 0 4px 20px rgba(34,197,94,0.15);
 }
 .risk-btn.yellow.active {
   border-color: var(--yellow);
-  background: linear-gradient(180deg, rgba(245,158,11,0.2), transparent);
+  background: linear-gradient(180deg, rgba(245,158,11,0.15), transparent);
+  box-shadow: 0 4px 20px rgba(245,158,11,0.15);
 }
 .risk-btn.red.active {
   border-color: var(--red);
-  background: linear-gradient(180deg, rgba(239,68,68,0.2), transparent);
+  background: linear-gradient(180deg, rgba(239,68,68,0.15), transparent);
+  box-shadow: 0 4px 20px rgba(239,68,68,0.15);
 }
 
 .launch-card {
@@ -414,26 +429,29 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
+  padding: 14px;
+  justify-content: center;
 }
 
 .drop-btn {
-  height: 54px;
+  height: 58px;
   border-radius: 10px;
   background: linear-gradient(135deg, var(--green), var(--cyan));
   color: #04110a;
   font-weight: 900;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   text-transform: uppercase;
-  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4);
+  transition: all 150ms ease;
 }
 
 .drop-btn:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.15);
+  transform: translateY(-1px);
 }
 
 .secondary-btn {
-  height: 34px;
+  height: 36px;
 }
 
 /* STATS MODAL */
@@ -443,32 +461,33 @@ button:disabled {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: 20px;
+  padding: 24px;
   color: var(--text);
 }
 
 .stats-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
 }
 
 .dialog-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 14px;
 }
 
 .stat-card {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.02);
-  padding: 10px 14px;
+  padding: 12px 16px;
 }
 
 .stat-card span {
@@ -479,10 +498,10 @@ button:disabled {
 
 .stat-card strong {
   display: block;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   margin-top: 2px;
 }
-    </style>
+</style>
   </head>
   <body>
     <main class="app">
@@ -491,7 +510,7 @@ button:disabled {
           <div class="brand-mark">G</div>
           <div>
             <h1>Gamba Plinko</h1>
-            <p>Desktop Workspace Only</p>
+            <p>Adaptive Desktop Environment</p>
           </div>
         </div>
         <div class="top-actions">
@@ -597,15 +616,15 @@ const CONFIG = {
   startingBalance: 10000,
   risks: {
     green: {
-      label: "Green", color: "#22C55E", glow: "rgba(34,197,94,0.3)",
+      label: "Green", color: "#22C55E",
       multipliers: [12, 5, 3, 1.4, 1.1, 0.5, 0.3, 0.2, 0.3, 0.5, 1.1, 1.4, 3, 5, 12]
     },
     yellow: {
-      label: "Yellow", color: "#F59E0B", glow: "rgba(245,158,11,0.3)",
+      label: "Yellow", color: "#F59E0B",
       multipliers: [35, 11, 6, 3, 1.2, 0.7, 0.2, 0, 0.2, 0.7, 1.2, 3, 6, 11, 35]
     },
     red: {
-      label: "Red", color: "#EF4444", glow: "rgba(239,68,68,0.3)",
+      label: "Red", color: "#EF4444",
       multipliers: [150, 45, 18, 7, 2, 0.5, 0.1, 0, 0.1, 0.5, 2, 7, 18, 45, 150]
     }
   },
@@ -641,7 +660,6 @@ const state = {
   activeRisks: ["green"],
   sound: true,
   balls: [],
-  particles: [],
   pulses: [],
   recentRounds: [],
   pendingRounds: new Map(),
@@ -672,24 +690,27 @@ function initCanvasSize() {
 }
 
 function calculateBoard(w, h) {
-  const boardWidth = 640;
   const centerX = w / 2;
-  const left = centerX - boardWidth / 2;
   const slotCount = CONFIG.rows + 1;
+  
+  // Calculate dynamic constraints based on available canvas height
+  const bottomOffset = 65; 
+  const slotBottom = h - bottomOffset;
+  const slotTop = slotBottom - 30;
+  const topOffset = 40;
+  
+  // Geometry Lock: Define peg rows matching row count flawlessly
+  const rowGap = (slotTop - topOffset) / CONFIG.rows;
+  const pegGap = rowGap * 1.12; 
+  
+  const boardWidth = pegGap * (slotCount - 1);
+  const left = centerX - boardWidth / 2;
   const slotWidth = boardWidth / slotCount;
-  
-  const slotBottom = h - 10;
-  const pocketHeight = 26;
-  const slotTop = slotBottom - pocketHeight;
-  
-  const rowGap = 24;
-  const pegGap = slotWidth;
-  const top = 30;
 
   const pegPositions = [];
   for (let row = 0; row < CONFIG.rows; row++) {
-    const count = row + 2;
-    const y = top + row * rowGap;
+    const count = row + 1; // Triangle pattern rows increment cleanly
+    const y = topOffset + row * rowGap;
     const startX = centerX - ((count - 1) * pegGap) / 2;
     for (let i = 0; i < count; i++) {
       pegPositions.push({ id: `p-${row}-${i}`, x: startX + i * pegGap, y, row });
@@ -697,8 +718,8 @@ function calculateBoard(w, h) {
   }
 
   state.metrics = {
-    left, centerX, boardWidth, top, pegGap, rowGap,
-    pegRadius: 3.5, ballRadius: 6.5, slotCount, slotWidth, slotTop, slotBottom
+    left, centerX, boardWidth, topOffset, pegGap, rowGap,
+    pegRadius: 4, ballRadius: 7, slotCount, slotWidth, slotTop, slotBottom
   };
   state.pegPositions = pegPositions;
 }
@@ -728,29 +749,30 @@ function launchRound() {
   
   for (let i = 0; i < count; i++) {
     const risk = activeOrdered[i % activeOrdered.length];
-    setTimeout(() => spawnBall(rId, risk, wager), i * 60);
+    setTimeout(() => spawnBall(rId, risk, wager), i * 70);
   }
 
-  playTone(180, 0.05, 0.05);
+  playTone(220, 0.04, 0.05);
   renderUi();
 }
 
 function spawnBall(round, risk, wager) {
   const m = state.metrics;
-  const startX = m.centerX + (Math.random() - 0.5) * 6;
-  const startY = m.top - 15;
+  // Natural micro variance at top drop point drop-zone
+  const startX = m.centerX + (Math.random() - 0.5) * 4;
+  const startY = m.topOffset - 20;
 
   state.balls.push({
     id: ballId++, round, risk, wager, color: riskConfig(risk).color,
-    x: startX, y: startY, vx: (Math.random() - 0.5) * 0.5, vy: 0.5,
-    trail: [], settled: false, lastPegId: null
+    x: startX, y: startY, vx: (Math.random() - 0.5) * 0.4, vy: 1.0,
+    settled: false, lastPegId: null
   });
 }
 
 function settleBall(ball) {
   ball.settled = true;
   state.balance += ball.payout;
-  state.hit = { risk: ball.risk, slot: ball.slot, until: performance.now() + 400 };
+  state.hit = { risk: ball.risk, slot: ball.slot, until: performance.now() + 350 };
 
   const win = ball.payout > ball.wager;
   const stats = state.stats;
@@ -776,7 +798,7 @@ function settleBall(ball) {
       state.pendingRounds.delete(round.id);
       round.profit = round.payout - round.stake;
       state.recentRounds.unshift(round);
-      state.recentRounds = state.recentRounds.slice(0, 10);
+      state.recentRounds = state.recentRounds.slice(0, 12);
       
       ui.lastResult.textContent = formatMultiplier(round.bestMultiplier) + " / " + formatMoney(round.payout);
       ui.profit.textContent = (round.profit >= 0 ? "+" : "") + formatMoney(round.profit);
@@ -784,7 +806,7 @@ function settleBall(ball) {
     }
   }
 
-  playTone(ball.multiplier >= 5 ? 440 : 280, 0.1, 0.04);
+  playTone(ball.multiplier >= 3 ? 480 : 320, 0.08, 0.05);
   renderMultipliers();
   renderUi();
 }
@@ -799,27 +821,26 @@ function updatePhysics() {
   const m = state.metrics;
   if (!m) return;
 
-  const GRAVITY = 0.16;
-  const BOUNCE_ELASTICITY = 0.35;
-  const WALL_DAMPING = 0.4;
+  const GRAVITY = 0.22;
+  const TERMINAL_VELOCITY = 6.5;
 
   state.balls.forEach(ball => {
     if (ball.settled) return;
 
-    ball.vy += GRAVITY;
+    ball.vy = Math.min(TERMINAL_VELOCITY, ball.vy + GRAVITY);
     ball.x += ball.vx;
     ball.y += ball.vy;
 
-    // Boundary containment
+    // Fluid container wall safety dampening
     if (ball.x - m.ballRadius < m.left) {
       ball.x = m.left + m.ballRadius;
-      ball.vx = -ball.vx * WALL_DAMPING;
+      ball.vx = Math.abs(ball.vx) * 0.4;
     } else if (ball.x + m.ballRadius > m.left + m.boardWidth) {
       ball.x = m.left + m.boardWidth - m.ballRadius;
-      ball.vx = -ball.vx * WALL_DAMPING;
+      ball.vx = -Math.abs(ball.vx) * 0.4;
     }
 
-    // Precise Peg Collisions
+    // Dynamic Peg Iteration matrix
     for (let i = 0; i < state.pegPositions.length; i++) {
       const peg = state.pegPositions[i];
       const dx = ball.x - peg.x;
@@ -828,34 +849,30 @@ function updatePhysics() {
       const minDist = m.ballRadius + m.pegRadius;
 
       if (dist < minDist) {
-        // Resolve intersection overlay immediately
+        // Enforce physical separation geometry boundaries immediately
         const overlap = minDist - dist;
-        const nx = dx / dist;
+        const nx = dx === 0 ? (Math.random() - 0.5) * 0.1 : dx / dist;
         const ny = dy / dist;
 
         ball.x += nx * overlap;
         ball.y += ny * overlap;
 
-        // Vector reflection bounce matrix
-        const dot = ball.vx * nx + ball.vy * ny;
-        ball.vx = (ball.vx - 2 * dot * nx) * BOUNCE_ELASTICITY;
-        ball.vy = (ball.vy - 2 * dot * ny) * BOUNCE_ELASTICITY;
-
-        // Controlled random micro-deflection to prevent edge stacking
         if (ball.lastPegId !== peg.id) {
           ball.lastPegId = peg.id;
-          const pushDirection = nx === 0 ? (Math.random() > 0.5 ? 1 : -1) : nx;
-          ball.vx += pushDirection * 0.22 + (Math.random() - 0.5) * 0.1;
-          
-          // Flash peg pulse effect
+
+          // Pure Galton split deflection metrics
+          const side = nx > 0 ? 1 : -1;
+          ball.vx = side * (1.2 + Math.random() * 0.6);
+          ball.vy = rowGap * 0.14;
+
           state.pulses.push({ x: peg.x, y: peg.y, color: ball.color, life: 1.0 });
-          if (Math.random() < 0.25) playTone(300 + (peg.row * 20), 0.02, 0.02);
+          if (Math.random() < 0.2) playTone(350 + (peg.row * 15), 0.02, 0.015);
         }
         break;
       }
     }
 
-    // Capture point trigger at slot intersection line
+    // Capture point processing trigger line
     if (ball.y >= m.slotTop) {
       const relX = ball.x - m.left;
       let slot = Math.floor(relX / m.slotWidth);
@@ -869,7 +886,7 @@ function updatePhysics() {
   });
 
   state.balls = state.balls.filter(b => !b.settled);
-  state.pulses = state.pulses.map(p => ({ ...p, life: p.life - 0.08 })).filter(p => p.life > 0);
+  state.pulses = state.pulses.map(p => ({ ...p, life: p.life - 0.1 })).filter(p => p.life > 0);
 }
 
 function draw() {
@@ -881,48 +898,36 @@ function draw() {
   ctx.fillStyle = "#0c111a";
   ctx.fillRect(0, 0, w, h);
 
-  // Vertical Slot Dividing Lines
-  ctx.strokeStyle = "rgba(37, 48, 65, 0.5)";
-  ctx.lineWidth = 1.5;
-  for (let i = 0; i <= m.slotCount; i++) {
-    const x = m.left + i * m.slotWidth;
-    ctx.beginPath();
-    ctx.moveTo(x, m.slotTop);
-    ctx.lineTo(x, m.slotBottom);
-    ctx.stroke();
-  }
-
-  // Draw Dynamic Pin Grid
+  // Structural Grid Pin Mapping
   state.pegPositions.forEach(peg => {
-    const pulse = state.pulses.find(p => Math.hypot(p.x - peg.x, p.y - peg.y) < 10);
-    
+    const pulse = state.pulses.find(p => Math.hypot(p.x - peg.x, p.y - peg.y) < 12);
     if (pulse) {
       ctx.fillStyle = pulse.color;
-      ctx.globalAlpha = pulse.life * 0.4;
+      ctx.globalAlpha = pulse.life * 0.35;
       ctx.beginPath();
       ctx.arc(peg.x, peg.y, m.pegRadius * 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1.0;
     }
 
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath();
     ctx.arc(peg.x, peg.y, m.pegRadius, 0, Math.PI * 2);
     ctx.fill();
   });
 
-  // Draw Physics Circles
+  // Dynamic Sphere Assets Render Pipeline
   state.balls.forEach(ball => {
     ctx.fillStyle = ball.color;
     ctx.shadowColor = ball.color;
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 10;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, m.ballRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
     ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   });
 }
@@ -930,6 +935,7 @@ function draw() {
 function renderMultipliers() {
   const m = state.metrics;
   if (!m) return;
+  
   ui.multiplierGrid.style.left = m.left + "px";
   ui.multiplierGrid.style.width = m.boardWidth + "px";
   ui.multiplierGrid.innerHTML = "";
@@ -944,7 +950,7 @@ function renderMultipliers() {
       const cell = document.createElement("div");
       const isHit = state.hit && state.hit.risk === risk && state.hit.slot === idx;
       cell.className = "multiplier-cell" + (isHit ? " hit" : "");
-      cell.style.width = `${m.slotWidth - 2}px`;
+      cell.style.width = `${m.slotWidth - 4}px`;
       cell.style.backgroundColor = config.color;
       if (isHit) cell.style.color = "#000000";
       cell.textContent = mult + "x";
@@ -976,7 +982,7 @@ function renderUi() {
   ui.roundCount.textContent = state.recentRounds.length;
   ui.recentList.innerHTML = "";
   if (state.recentRounds.length === 0) {
-    ui.recentList.innerHTML = '<p class="muted">No rounds yet.</p>';
+    ui.recentList.innerHTML = '<p class="muted" style="text-align:center; padding-top:20px;">No rounds yet.</p>';
   } else {
     state.recentRounds.forEach(r => {
       const div = document.createElement("div");
@@ -1059,6 +1065,8 @@ function bindEvents() {
 
   ui.statsBtn.addEventListener("click", () => { renderStats(); ui.statsDialog.showModal(); });
   ui.closeStats.addEventListener("click", () => ui.statsDialog.close());
+  
+  window.addEventListener("resize", initCanvasSize);
 }
 
 bindEvents();
