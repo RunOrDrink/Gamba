@@ -970,8 +970,15 @@ function launchRound() {
 }
 
 function spawnBall(round, risk, wager, index) {
+  const m = state.metrics;
+  if (!m) return;
+
   const config = riskConfig(risk);
   const seed = Math.random() * 1000 + index * 0.113;
+
+  // Initialize coordinates properly immediately upon creation to prevent logic errors inside update loop
+  const startX = m.centerX + (Math.random() - 0.5) * m.pegGap * 0.15;
+  const startY = m.top - m.rowGap * 1.2;
 
   state.balls.push({
     id: ballId,
@@ -979,6 +986,11 @@ function spawnBall(round, risk, wager, index) {
     risk,
     wager,
     color: config.color,
+    x: startX,
+    y: startY,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: 0,
+    position: { x: startX, y: startY },
     trail: [],
     settled: false,
     lastPegHit: null,
@@ -1045,13 +1057,6 @@ function updateBalls(now) {
   const BOUNCE = 0.58; 
 
   state.balls.forEach((ball) => {
-    if (!ball.x || !ball.y) {
-      ball.x = m.centerX + (Math.random() - 0.5) * m.pegGap * 0.15;
-      ball.y = m.top - m.rowGap * 1.2;
-      ball.vx = (Math.random() - 0.5) * 0.5;
-      ball.vy = 0;
-    }
-
     if (ball.settled) return;
 
     ball.vy += GRAVITY;
