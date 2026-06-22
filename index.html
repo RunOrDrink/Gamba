@@ -743,8 +743,14 @@ const CONFIG = {
   rows: 14,
   maxBalls: 100,
   startingBalance: 10000,
-  houseRakePercent: 0.04, // 4% House Rake
-  startingPrizePool: 500,  // Initial fluid pool reserve
+  houseRakePercent: 0.04, 
+  startingPrizePool: 500,  
+  physics: {
+    gravity: 0.15,
+    bounce: 0.52,      // Elasticity factor against pegs
+    wallBounce: 0.60,  // Elasticity factor against outer side-rails
+    friction: 0.994    // Natural ambient air drag
+  },
   risks: {
     green: {
       label: "Green",
@@ -829,18 +835,10 @@ const state = {
 };
 
 let audioContext = null;
-let ballId = 1;
 let roundId = 1;
 
 function emptyRiskStats() {
-  return {
-    bets: 0,
-    wins: 0,
-    wagered: 0,
-    paid: 0,
-    biggestWin: 0,
-    highestMultiplier: 0
-  };
+  return { bets: 0, wins: 0, wagered: 0, paid: 0, biggestWin: 0, highestMultiplier: 0 };
 }
 
 function clamp(value, min, max) {
@@ -848,10 +846,7 @@ function clamp(value, min, max) {
 }
 
 function formatMoney(value) {
-  return Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+  return Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatMultiplier(value) {
@@ -872,18 +867,6 @@ function getMaxRiskMultiplier() {
   return maxMult;
 }
 
-function chooseWeightedSlot(risk) {
-  const chances = riskConfig(risk).chances;
-  let cursor = Math.random() * 100;
-
-  for (let index = 0; index < chances.length; index += 1) {
-    cursor -= chances[index];
-    if (cursor <= 0) return index;
-  }
-
-  return chances.length - 1;
-}
-
 function normalizeBallCount(value) {
   const riskCount = state.activeRisks.length || 1;
   let count = Math.round(clamp(Number(value) || 1, riskCount, CONFIG.maxBalls));
@@ -892,7 +875,6 @@ function normalizeBallCount(value) {
     const nextMultiple = Math.ceil(count / riskCount) * riskCount;
     count = nextMultiple <= CONFIG.maxBalls ? nextMultiple : Math.floor(CONFIG.maxBalls / riskCount) * riskCount;
   }
-
   return clamp(count, 1, CONFIG.maxBalls);
 }
 
@@ -928,8 +910,8 @@ function calculateBoard() {
   const pegGap = slotWidth;
   const lastPegY = slotTop - rowGap * 0.42;
   const top = lastPegY - (CONFIG.rows - 1) * rowGap;
-  const pegRadius = clamp(pegGap * 0.105, 3.2, 5.2);
-  const ballRadius = clamp(pegGap * 0.19, 7.5, 10.5);
+  const pegRadius = clamp(pegGap * 0.09, 2.5, 4.5);
+  const ballRadius = clamp(pegGap * 0.17, 6.0, 9.5);
 
   const pegPositions = [];
   for (let row = 0; row < CONFIG.rows; row += 1) {
@@ -938,153 +920,15 @@ function calculateBoard() {
     const startX = centerX - ((count - 1) * pegGap) / 2;
 
     for (let index = 0; index < count; index += 1) {
-      pegPositions.push({ x: startX + index * pegGap, y, row });
+      pegPositions.push({ x: startX + index * pegGap, y, row, id: `peg-${row}-${index}` });
     }
   }
 
   state.metrics = {
-    left,
-    centerX,
-    boardWidth,
-    top,
-    lastPegY,
-    pegGap,
-    rowGap,
-    pegRadius,
-    ballRadius,
-    slotCount,
-    slotWidth,
-    slotTop,
-    slotBottom,
-    pocketHeight
+    left, centerX, boardWidth, top, lastPegY, pegGap, rowGap,
+    pegRadius, ballRadius, slotCount, slotWidth, slotTop, slotBottom, pocketHeight
   };
   state.pegPositions = pegPositions;
-}
-
-function seededRandom(seed) {
-  let value = Math.sin(seed + 1) * 10000;
-  return function random() {
-    value = Math.sin(value + 1.61803398875) * 10000;
-    return value - Math.floor(value);
-  };
-}
-
-function makePath(targetSlot, seed) {
-  const m = state.metrics;
-  const random = seededRandom(seed);
-  const targetX = m.left + m.slotWidth * (targetSlot + 0.5);
-  const points = [
-    {
-      x: m.centerX + (random() - 0.5) * m.pegGap * 0.16,
-      y: m.top - m.rowGap * 1.45
-    }
-  ];
-
-  let rights = 0;
-  let previousMove = 0;
-
-  for (let step = 1; step <= CONFIG.rows; step += 1) {
-    const pegY = m.top + (step - 1) * m.rowGap;
-    const beforeRights = rights;
-    const rowsLeftAfterThis = CONFIG.rows - step;
-    const rightsStillNeeded = targetSlot - beforeRights;
-    let moveRight;
-
-    if (rightsStillNeeded <= 0) {
-      moveRight = false;
-    } else if (rightsStillNeeded > rowsLeftAfterThis) {
-      moveRight = true;
-    } else {
-      const pressure = rightsStillNeeded / (rowsLeftAfterThis + 1);
-      const antiStreak = previousMove === 1 ? -0.1 : previousMove === -1 ? 0.1 : 0;
-      moveRight = random() < clamp(pressure + antiStreak, 0.18, 0.82);
-    }
-
-    rights += moveRight ? 1 : 0;
-    previousMove = moveRight ? 1 : -1;
-
-    const bounceSide = moveRight ? 1 : -1;
-    const pegX = m.centerX + (beforeRights - (step - 1) / 2 + bounceSide * 0.5) * m.pegGap;
-    const contactClearance = m.ballRadius + m.pegRadius + 4.8;
-    const outerMin = m.left - m.slotWidth * 0.08;
-    const outerMax = m.left + m.boardWidth + m.slotWidth * 0.08;
-    const approachX = pegX + bounceSide * contactClearance * 0.58;
-    const approachY = pegY - contactClearance * 0.82;
-    const arcX = pegX + bounceSide * contactClearance * 1.12;
-    const arcY = pegY - contactClearance * 0.05;
-    const exitX = pegX + bounceSide * contactClearance * 0.9;
-    const exitY = pegY + contactClearance * 0.54;
-    const laneX = m.centerX + (rights - step / 2) * m.pegGap;
-    const laneJitter = (random() - 0.5) * m.pegGap * 0.07;
-
-    points.push({
-      x: clamp(approachX, outerMin, outerMax),
-      y: approachY
-    });
-
-    points.push({
-      x: clamp(arcX, outerMin, outerMax),
-      y: arcY
-    });
-
-    points.push({
-      x: clamp(exitX, outerMin, outerMax),
-      y: exitY
-    });
-
-    points.push({
-      x: clamp(exitX + bounceSide * contactClearance * 0.22, outerMin, outerMax),
-      y: pegY + m.rowGap * 0.28
-    });
-
-    points.push({
-      x: clamp(laneX + laneJitter, m.left + m.slotWidth * 0.28, m.left + m.boardWidth - m.slotWidth * 0.28),
-      y: pegY + m.rowGap * 0.52
-    });
-  }
-
-  points.push({
-    x: targetX + (random() - 0.5) * m.slotWidth * 0.08,
-    y: m.slotTop + m.pocketHeight * 0.46
-  });
-
-  return preparePath(points);
-}
-
-function preparePath(points) {
-  let total = 0;
-  const segments = [];
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const a = points[index];
-    const b = points[index + 1];
-    const length = Math.hypot(b.x - a.x, b.y - a.y);
-    total += length;
-    segments.push({ a, b, length, end: total });
-  }
-
-  return { points, segments, total };
-}
-
-function positionOnPath(path, t, wobbleSeed) {
-  const distance = clamp(t, 0, 1) * path.total;
-  const segment = path.segments.find((item) => distance <= item.end) || path.segments[path.segments.length - 1];
-  const startDistance = segment.end - segment.length;
-  const local = segment.length ? (distance - startDistance) / segment.length : 1;
-  const ease = local;
-  const x = segment.a.x + (segment.b.x - segment.a.x) * ease;
-  const y = segment.a.y + (segment.b.y - segment.a.y) * ease;
-  const dx = segment.b.x - segment.a.x;
-  const dy = segment.b.y - segment.a.y;
-  const length = Math.max(1, Math.hypot(dx, dy));
-  const normalX = -dy / length;
-  const normalY = dx / length;
-  const wobble = Math.sin(t * Math.PI * 34 + wobbleSeed) * (1 - t) * 0.22;
-
-  return {
-    x: x + normalX * wobble,
-    y: y + normalY * wobble
-  };
 }
 
 function launchRound() {
@@ -1093,7 +937,6 @@ function launchRound() {
 
   let wager = Math.max(1, Math.floor(Number(ui.betInput.value) || state.wager));
   
-  // Calculate Cap Rule: Max Allowed Bet = Prize Pool / Highest Multiplier
   const maxMultiplier = getMaxRiskMultiplier();
   const maxSafeBet = maxMultiplier > 0 ? Math.floor(state.prizePool / maxMultiplier) : 0;
 
@@ -1118,7 +961,6 @@ function launchRound() {
   const stake = wager * state.ballCount;
   state.balance -= stake;
 
-  // Process the Core Liquidity Mechanism
   const rake = stake * CONFIG.houseRakePercent;
   const poolContribution = stake - rake;
   state.houseProfit += rake;
@@ -1128,82 +970,74 @@ function launchRound() {
   roundId += 1;
 
   const round = {
-    id,
-    stake,
-    payout: 0,
-    completed: 0,
-    ballCount: state.ballCount,
-    risks: [],
-    bestMultiplier: 0,
-    startedAt: Date.now()
+    id, stake, payout: 0, completed: 0, ballCount: state.ballCount,
+    risks: [], bestMultiplier: 0, startedAt: Date.now()
   };
   state.pendingRounds.set(id, round);
 
   const risks = riskSequence(state.ballCount);
-  const spawnGap = 48;
+  const spawnGap = 120; // Slight stagger to allow smooth physical separation
 
   risks.forEach((risk, index) => {
-    window.setTimeout(() => spawnBall(id, risk, wager, index), index * spawnGap);
+    window.setTimeout(() => spawnBall(id, risk, wager), index * spawnGap);
   });
 
   playTone(160, 0.055, 0.04);
   renderUi();
 }
 
-function spawnBall(round, risk, wager, index) {
-  const slot = chooseWeightedSlot(risk);
-  const config = riskConfig(risk);
-  const multiplier = config.multipliers[slot];
-  const seed = Math.random() * 1000 + index * 0.113;
-  const path = makePath(slot, seed);
+function spawnBall(round, risk, wager) {
+  const m = state.metrics;
+  if (!m) return;
+  
+  // Inject micro-randomized drop variance right near the top center peg position
+  const startX = m.centerX + (Math.random() - 0.5) * 14;
+  const startY = m.top - m.rowGap * 1.5;
 
   state.balls.push({
-    id: ballId,
     round,
     risk,
-    slot,
-    multiplier,
     wager,
-    payout: Math.round(wager * multiplier * 100) / 100,
-    color: config.color,
-    path,
-    start: performance.now(),
-    duration: 2700 + Math.random() * 360,
+    x: startX,
+    y: startY,
+    vx: (Math.random() - 0.5) * 1.5,
+    vy: 0,
+    color: riskConfig(risk).color,
     trail: [],
-    nextHit: 0,
-    settled: false,
-    wobbleSeed: seed
+    lastPegHitId: null,
+    settled: false
   });
-  ballId += 1;
 }
 
-function settleBall(ball) {
+function settleBall(ball, finalSlot) {
   if (ball.settled) return;
   ball.settled = true;
   
-  // Cap payout to available pool size to prevent house negative debt exposure
-  let actualPayout = ball.payout;
+  const config = riskConfig(ball.risk);
+  const multiplier = config.multipliers[finalSlot];
+  const calculatedPayout = Math.round(ball.wager * multiplier * 100) / 100;
+
+  let actualPayout = calculatedPayout;
   if (actualPayout > state.prizePool) {
     actualPayout = state.prizePool;
   }
 
   state.prizePool -= actualPayout;
   state.balance += actualPayout;
-  state.hit = { risk: ball.risk, slot: ball.slot, until: performance.now() + 520 };
+  state.hit = { risk: ball.risk, slot: finalSlot, until: performance.now() + 520 };
 
   const win = actualPayout > ball.wager;
   const riskStats = state.stats.byRisk[ball.risk];
   
-  // Clone object to inject localized actual payout metric details to updates
-  const simulatedBall = { ...ball, payout: actualPayout };
-  updateStats(state.stats, simulatedBall, win);
-  updateStats(riskStats, simulatedBall, win);
+  const mutatedBall = { ...ball, payout: actualPayout, multiplier };
+  updateStats(state.stats, mutatedBall, win);
+  updateStats(riskStats, mutatedBall, win);
 
   const round = state.pendingRounds.get(ball.round);
   if (round) {
     round.payout = Math.round((round.payout + actualPayout) * 100) / 100;
     round.completed += 1;
-    round.bestMultiplier = Math.max(round.bestMultiplier, ball.multiplier);
+    round.bestMultiplier = Math.max(round.bestMultiplier, multiplier);
     if (!round.risks.includes(ball.risk)) round.risks.push(ball.risk);
 
     if (round.completed >= round.ballCount) {
@@ -1216,7 +1050,7 @@ function settleBall(ball) {
     }
   }
 
-  playTone(ball.multiplier >= 10 ? 520 : 320, ball.multiplier >= 10 ? 0.18 : 0.08, 0.04);
+  playTone(multiplier >= 10 ? 520 : 320, multiplier >= 10 ? 0.18 : 0.08, 0.04);
   renderMultipliers();
   renderUi();
 }
@@ -1231,78 +1065,144 @@ function updateStats(stats, ball, win) {
 }
 
 function tick(now) {
-  updateBalls(now);
-  updateParticles(now);
+  updatePhysics();
+  updateParticles();
   draw(now);
   requestAnimationFrame(tick);
 }
 
-function updateBalls(now) {
+function updatePhysics() {
+  const m = state.metrics;
+  if (!m) return;
+
+  const p = CONFIG.physics;
+
   state.balls.forEach((ball) => {
     if (ball.settled) return;
-    const t = clamp((now - ball.start) / ball.duration, 0, 1);
-    const position = positionOnPath(ball.path, t, ball.wobbleSeed);
-    ball.position = position;
-    ball.trail.push(position);
-    if (ball.trail.length > 9) ball.trail.shift();
 
-    while (ball.nextHit < CONFIG.rows) {
-      const pegY = state.metrics.top + ball.nextHit * state.metrics.rowGap;
-      if (position.y < pegY) break;
-      addPegHit(position.x, pegY, ball.risk);
-      ball.nextHit += 1;
+    // Apply basic natural forces (gravity + air resistance deceleration)
+    ball.vy += p.gravity;
+    ball.vx *= p.friction;
+    ball.vy *= p.friction;
+
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // Track position trail history for rendering motion glow
+    ball.trail.push({ x: ball.x, y: ball.y });
+    if (ball.trail.length > 8) ball.trail.shift();
+
+    // Side triangle/wall dynamic boundary constraint check
+    const currentPegRowY = (ball.y - m.top) / m.rowGap;
+    constcurrentRowIndex = clamp(Math.floor(currentPegRowY), 0, CONFIG.rows - 1);
+    
+    // Extrapolate bounding width relative to depth height level inside pyramid layout
+    const rowPegCount = currentRowIndex + 2;
+    const leftmostPegX = m.centerX - ((rowPegCount - 1) * m.pegGap) / 2;
+    const rightmostPegX = leftmostPegX + (rowPegCount - 1) * m.pegGap;
+
+    const leftWallBoundary = leftmostPegX - m.pegGap * 0.5;
+    const rightWallBoundary = rightmostPegX + m.pegGap * 0.5;
+
+    if (ball.x - m.ballRadius < leftWallBoundary) {
+      ball.x = leftWallBoundary + m.ballRadius;
+      ball.vx = Math.abs(ball.vx) * p.wallBounce;
+    } else if (ball.x + m.ballRadius > rightWallBoundary) {
+      ball.x = rightWallBoundary - m.ballRadius;
+      ball.vx = -Math.abs(ball.vx) * p.wallBounce;
     }
 
-    if (t >= 1) settleBall(ball);
+    // Rigid-body peg intersection processing
+    let nearestPeg = null;
+    let minDist = Infinity;
+
+    state.pegPositions.forEach((peg) => {
+      // Coarse distance bounding optimization check
+      if (Math.abs(peg.y - ball.y) < m.rowGap * 1.2 && Math.abs(peg.x - ball.x) < m.pegGap * 1.2) {
+        const dist = Math.hypot(peg.x - ball.x, peg.y - ball.y);
+        if (dist < minDist) {
+          minDist = dist;
+          nearestPeg = peg;
+        }
+      }
+    });
+
+    const collisionDistance = m.ballRadius + m.pegRadius;
+    if (nearestPeg && minDist < collisionDistance) {
+      // Avoid firing redundant bounce calculations per micro-frame on single impact interactions
+      if (ball.lastPegHitId !== nearestPeg.id) {
+        ball.lastPegHitId = nearestPeg.id;
+
+        // Vector math reflection processing
+        const nx = (ball.x - nearestPeg.x) / minDist;
+        const ny = (ball.y - nearestPeg.y) / minDist;
+
+        // Push ball outwards to resolve overlapping frame clipping bugs
+        ball.x = nearestPeg.x + nx * collisionDistance;
+        ball.y = nearestPeg.y + ny * collisionDistance;
+
+        // Normal scalar dot product
+        const dotProduct = ball.vx * nx + ball.vy * ny;
+        
+        // Dynamic velocity correction
+        ball.vx = (ball.vx - 2 * dotProduct * nx) * p.bounce;
+        ball.vy = (ball.vy - 2 * dotProduct * ny) * p.bounce;
+
+        // Add micro dispersion chaos to emulate physical texture/imperfections
+        ball.vx += (Math.random() - 0.5) * 0.35;
+
+        triggerPegPulse(nearestPeg.x, nearestPeg.y, ball.risk);
+      }
+    } else if (nearestPeg && minDist > collisionDistance * 1.5) {
+      // Release peg hit ownership once clear of object collision threshold
+      if (ball.lastPegHitId === nearestPeg.id) {
+        ball.lastPegHitId = null;
+      }
+    }
+
+    // Checking floor landing trigger state values
+    if (ball.y >= m.slotTop) {
+      const horizontalOffset = ball.x - m.left;
+      let finalSlot = Math.floor(horizontalOffset / m.slotWidth);
+      finalSlot = clamp(finalSlot, 0, m.slotCount - 1);
+      settleBall(ball, finalSlot);
+    }
   });
 
-  state.balls = state.balls.filter((ball) => !ball.settled || now - (state.hit ? state.hit.until : 0) < 800);
+  state.balls = state.balls.filter((ball) => !ball.settled);
 }
 
-function addPegHit(x, y, risk) {
-  const nearest = state.pegPositions.reduce((best, peg) => {
-    if (!best) return peg;
-    return Math.hypot(peg.x - x, peg.y - y) < Math.hypot(best.x - x, best.y - y) ? peg : best;
-  }, null);
+function triggerPegPulse(x, y, risk) {
+  state.pulses.push({ x, y, color: riskConfig(risk).color, life: 1 });
 
-  if (!nearest) return;
-
-  state.pulses.push({
-    x: nearest.x,
-    y: nearest.y,
-    color: riskConfig(risk).color,
-    life: 1
-  });
-
-  for (let index = 0; index < 4; index += 1) {
+  for (let index = 0; index < 5; index += 1) {
     const angle = Math.random() * Math.PI * 2;
     state.particles.push({
-      x: nearest.x,
-      y: nearest.y,
-      vx: Math.cos(angle) * (0.5 + Math.random() * 0.9),
-      vy: Math.sin(angle) * (0.5 + Math.random() * 0.9),
+      x, y,
+      vx: Math.cos(angle) * (0.6 + Math.random() * 1.2),
+      vy: Math.sin(angle) * (0.6 + Math.random() * 1.2),
       color: riskConfig(risk).color,
       life: 1
     });
   }
 
-  if (Math.random() < 0.2) playTone(220 + Math.random() * 160, 0.02, 0.012);
+  if (Math.random() < 0.25) playTone(240 + Math.random() * 140, 0.02, 0.015);
 }
 
 function updateParticles() {
   state.particles = state.particles
-    .map((particle) => ({
-      ...particle,
-      x: particle.x + particle.vx,
-      y: particle.y + particle.vy,
-      vy: particle.vy + 0.035,
-      life: particle.life - 0.035
+    .map((p) => ({
+      ...p,
+      x: p.x + p.vx,
+      y: p.y + p.vy,
+      vy: p.vy + 0.04,
+      life: p.life - 0.04
     }))
-    .filter((particle) => particle.life > 0);
+    .filter((p) => p.life > 0);
 
   state.pulses = state.pulses
-    .map((pulse) => ({ ...pulse, life: pulse.life - 0.05 }))
-    .filter((pulse) => pulse.life > 0);
+    .map((p) => ({ ...p, life: p.life - 0.06 }))
+    .filter((p) => p.life > 0);
 }
 
 function draw(now) {
@@ -1328,13 +1228,13 @@ function draw(now) {
   drawBoardLines(m);
   drawPegs(m);
   drawParticles();
-  drawBalls(now, m);
+  drawBalls(m);
 }
 
 function drawBoardLines(m) {
   ctx.save();
-  ctx.strokeStyle = "rgba(148,163,184,0.34)";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(148,163,184,0.22)";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(m.left, m.slotTop);
   ctx.lineTo(m.left + m.boardWidth, m.slotTop);
@@ -1347,21 +1247,20 @@ function drawBoardLines(m) {
     ctx.lineTo(x, m.slotBottom);
     ctx.stroke();
   }
-
   ctx.restore();
 }
 
 function drawPegs(m) {
   state.pegPositions.forEach((peg) => {
-    const pulse = state.pulses.find((item) => Math.hypot(item.x - peg.x, item.y - peg.y) < m.pegRadius * 2);
+    const pulse = state.pulses.find((p) => Math.hypot(p.x - peg.x, p.y - peg.y) < m.pegRadius * 2);
     const radius = m.pegRadius;
 
-    const glow = ctx.createRadialGradient(peg.x, peg.y, 1, peg.x, peg.y, radius * (pulse ? 7 : 4.4));
-    glow.addColorStop(0, pulse ? "rgba(255,255,255,0.52)" : "rgba(255,255,255,0.22)");
+    const glow = ctx.createRadialGradient(peg.x, peg.y, 1, peg.x, peg.y, radius * (pulse ? 6.5 : 4.0));
+    glow.addColorStop(0, pulse ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.18)");
     glow.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(peg.x, peg.y, radius * (pulse ? 7 : 4.4), 0, Math.PI * 2);
+    ctx.arc(peg.x, peg.y, radius * (pulse ? 6.5 : 4.0), 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "#f8fafc";
@@ -1369,57 +1268,51 @@ function drawPegs(m) {
     ctx.arc(peg.x, peg.y, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(100,116,139,0.72)";
+    ctx.strokeStyle = "rgba(100,116,139,0.6)";
     ctx.lineWidth = 1;
     ctx.stroke();
   });
 }
 
 function drawParticles() {
-  state.particles.forEach((particle) => {
-    ctx.globalAlpha = particle.life;
-    ctx.fillStyle = particle.color;
+  state.particles.forEach((p) => {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(particle.x, particle.y, 2.2 * particle.life, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 2.2 * p.life, 0, Math.PI * 2);
     ctx.fill();
   });
   ctx.globalAlpha = 1;
 }
 
-function drawBalls(now, m) {
+function drawBalls(m) {
   state.balls.forEach((ball) => {
-    if (!ball.position || ball.settled) return;
     const radius = m.ballRadius;
 
     ball.trail.forEach((point, index) => {
       const alpha = index / Math.max(1, ball.trail.length);
-      ctx.globalAlpha = alpha * 0.18;
+      ctx.globalAlpha = alpha * 0.15;
       ctx.fillStyle = ball.color;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, radius * alpha * 0.72, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius * alpha * 0.75, 0, Math.PI * 2);
       ctx.fill();
     });
     ctx.globalAlpha = 1;
 
     ctx.shadowColor = ball.color;
-    ctx.shadowBlur = 16;
+    ctx.shadowBlur = 14;
     ctx.fillStyle = ball.color;
     ctx.beginPath();
-    ctx.arc(ball.position.x, ball.position.y, radius, 0, Math.PI * 2);
+    ctx.arc(ball.x, ball.y, radius, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(255,255,255,0.88)";
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
     ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.arc(ball.position.x, ball.position.y, radius, 0, Math.PI * 2);
+    ctx.arc(ball.x, ball.y, radius, 0, Math.PI * 2);
     ctx.stroke();
   });
-
-  if (state.hit && now > state.hit.until) {
-    state.hit = null;
-    renderMultipliers();
-  }
 }
 
 function renderMultipliers() {
@@ -1563,17 +1456,8 @@ function resetDemo() {
   state.pendingRounds.clear();
   state.hit = null;
   state.stats = {
-    bets: 0,
-    wins: 0,
-    wagered: 0,
-    paid: 0,
-    biggestWin: 0,
-    highestMultiplier: 0,
-    byRisk: {
-      green: emptyRiskStats(),
-      yellow: emptyRiskStats(),
-      red: emptyRiskStats()
-    }
+    bets: 0, wins: 0, wagered: 0, paid: 0, biggestWin: 0, highestMultiplier: 0,
+    byRisk: { green: emptyRiskStats(), yellow: emptyRiskStats(), red: emptyRiskStats() }
   };
   ui.lastResult.textContent = "Ready";
   ui.profit.textContent = "0.00 GAMBA";
