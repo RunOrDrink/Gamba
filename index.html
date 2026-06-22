@@ -277,11 +277,10 @@ p {
 
 .multiplier-grid {
   position: absolute;
-  right: 50%;
+  left: 0;
   bottom: 14px;
   display: grid;
   gap: 3px;
-  transform: translateX(50%);
   pointer-events: none;
 }
 
@@ -717,7 +716,6 @@ p {
         </div>
 
         <div class="launch-card">
-          <button id="turboBtn" class="secondary-btn" type="button">Turbo off</button>
           <button id="dropBtn" class="drop-btn" type="button">Drop</button>
           <button id="resetBtn" class="secondary-btn" type="button">Reset demo</button>
         </div>
@@ -744,22 +742,22 @@ const CONFIG = {
       label: "Green",
       color: "#22C55E",
       glow: "rgba(34,197,94,0.45)",
-      multipliers: [16, 2.5, 1.5, 1.1, 0.8, 0.6, 0.4, 0.2, 0.4, 0.6, 0.8, 1.1, 1.5, 2.5, 16],
-      chances: [0.5, 0.6, 1.4, 4, 8, 10, 15, 21, 15, 10, 8, 4, 1.4, 0.6, 0.5]
+      multipliers: [30, 12, 6, 3, 1.8, 1.2, 0.6, 0.2, 0.6, 1.2, 1.8, 3, 6, 12, 30],
+      chances: [2.5, 0.2, 0.3, 0.5, 1, 2, 8, 71, 8, 2, 1, 0.5, 0.3, 0.2, 2.5]
     },
     yellow: {
       label: "Yellow",
       color: "#F59E0B",
       glow: "rgba(245,158,11,0.45)",
-      multipliers: [40, 8, 4, 2.2, 1.2, 0.7, 0.5, 0.2, 0.5, 0.7, 1.2, 2.2, 4, 8, 40],
-      chances: [0.05, 0.12, 0.3, 0.8, 2.5, 7, 16, 46.46, 16, 7, 2.5, 0.8, 0.3, 0.12, 0.05]
+      multipliers: [60, 15, 8, 4, 2, 1, 0.3, 0, 0.3, 1, 2, 4, 8, 15, 60],
+      chances: [0.5, 0.05, 0.1, 0.2, 0.5, 2, 10, 73.3, 10, 2, 0.5, 0.2, 0.1, 0.05, 0.5]
     },
     red: {
       label: "Red",
       color: "#EF4444",
       glow: "rgba(239,68,68,0.48)",
-      multipliers: [150, 20, 6, 2, 0.75, 0.2, 0.1, 0, 0.1, 0.2, 0.75, 2, 6, 20, 150],
-      chances: [0.005, 0.04, 0.25, 2.5, 8, 13, 18, 16.41, 18, 13, 8, 2.5, 0.25, 0.04, 0.005]
+      multipliers: [300, 80, 25, 10, 3, 1, 0.2, 0, 0.2, 1, 3, 10, 25, 80, 300],
+      chances: [0.005, 0.02, 0.08, 0.25, 0.7, 2, 10, 73.89, 10, 2, 0.7, 0.25, 0.08, 0.02, 0.005]
     }
   },
   riskOrder: ["green", "yellow", "red"]
@@ -779,7 +777,6 @@ const ui = {
   betInput: document.getElementById("betInput"),
   ballInput: document.getElementById("ballInput"),
   dropBtn: document.getElementById("dropBtn"),
-  turboBtn: document.getElementById("turboBtn"),
   soundBtn: document.getElementById("soundBtn"),
   statsBtn: document.getElementById("statsBtn"),
   resetBtn: document.getElementById("resetBtn"),
@@ -793,7 +790,6 @@ const state = {
   wager: 10,
   ballCount: 1,
   activeRisks: ["green"],
-  turbo: false,
   sound: true,
   balls: [],
   particles: [],
@@ -914,7 +910,7 @@ function calculateBoard() {
 
   const pegPositions = [];
   for (let row = 0; row < CONFIG.rows; row += 1) {
-    const count = row + 1;
+    const count = row + 2;
     const y = top + row * rowGap;
     const startX = centerX - ((count - 1) * pegGap) / 2;
 
@@ -966,9 +962,9 @@ function makePath(targetSlot, seed) {
 
   for (let step = 1; step <= CONFIG.rows; step += 1) {
     const pegY = m.top + (step - 1) * m.rowGap;
-    const pegX = m.centerX + (rights - (step - 1) / 2) * m.pegGap;
+    const beforeRights = rights;
     const rowsLeftAfterThis = CONFIG.rows - step;
-    const rightsStillNeeded = targetSlot - rights;
+    const rightsStillNeeded = targetSlot - beforeRights;
     let moveRight;
 
     if (rightsStillNeeded <= 0) {
@@ -985,11 +981,14 @@ function makePath(targetSlot, seed) {
     previousMove = moveRight ? 1 : -1;
 
     const bounceSide = moveRight ? 1 : -1;
+    const pegX = m.centerX + (beforeRights - (step - 1) / 2 + bounceSide * 0.5) * m.pegGap;
     const contactClearance = m.ballRadius + m.pegRadius + 4.8;
     const outerMin = m.left - m.slotWidth * 0.08;
     const outerMax = m.left + m.boardWidth + m.slotWidth * 0.08;
     const approachX = pegX + bounceSide * contactClearance * 0.58;
     const approachY = pegY - contactClearance * 0.82;
+    const arcX = pegX + bounceSide * contactClearance * 1.12;
+    const arcY = pegY - contactClearance * 0.05;
     const exitX = pegX + bounceSide * contactClearance * 0.9;
     const exitY = pegY + contactClearance * 0.54;
     const laneX = m.centerX + (rights - step / 2) * m.pegGap;
@@ -1001,13 +1000,23 @@ function makePath(targetSlot, seed) {
     });
 
     points.push({
+      x: clamp(arcX, outerMin, outerMax),
+      y: arcY
+    });
+
+    points.push({
       x: clamp(exitX, outerMin, outerMax),
       y: exitY
     });
 
     points.push({
+      x: clamp(exitX + bounceSide * contactClearance * 0.22, outerMin, outerMax),
+      y: pegY + m.rowGap * 0.28
+    });
+
+    points.push({
       x: clamp(laneX + laneJitter, m.left + m.slotWidth * 0.28, m.left + m.boardWidth - m.slotWidth * 0.28),
-      y: pegY + m.rowGap * 0.62
+      y: pegY + m.rowGap * 0.52
     });
   }
 
@@ -1039,7 +1048,7 @@ function positionOnPath(path, t, wobbleSeed) {
   const segment = path.segments.find((item) => distance <= item.end) || path.segments[path.segments.length - 1];
   const startDistance = segment.end - segment.length;
   const local = segment.length ? (distance - startDistance) / segment.length : 1;
-  const ease = local * local * (3 - 2 * local);
+  const ease = local;
   const x = segment.a.x + (segment.b.x - segment.a.x) * ease;
   const y = segment.a.y + (segment.b.y - segment.a.y) * ease;
   const dx = segment.b.x - segment.a.x;
@@ -1047,7 +1056,7 @@ function positionOnPath(path, t, wobbleSeed) {
   const length = Math.max(1, Math.hypot(dx, dy));
   const normalX = -dy / length;
   const normalY = dx / length;
-  const wobble = Math.sin(t * Math.PI * 34 + wobbleSeed) * (1 - t) * 0.85;
+  const wobble = Math.sin(t * Math.PI * 34 + wobbleSeed) * (1 - t) * 0.22;
 
   return {
     x: x + normalX * wobble,
@@ -1088,7 +1097,7 @@ function launchRound() {
   state.pendingRounds.set(id, round);
 
   const risks = riskSequence(state.ballCount);
-  const spawnGap = state.turbo ? 38 : 85;
+  const spawnGap = 48;
 
   risks.forEach((risk, index) => {
     window.setTimeout(() => spawnBall(id, risk, wager, index), index * spawnGap);
@@ -1116,7 +1125,7 @@ function spawnBall(round, risk, wager, index) {
     color: config.color,
     path,
     start: performance.now(),
-    duration: state.turbo ? 1850 + Math.random() * 240 : 3100 + Math.random() * 520,
+    duration: 2700 + Math.random() * 360,
     trail: [],
     nextHit: 0,
     settled: false,
@@ -1362,6 +1371,7 @@ function drawBalls(now, m) {
 function renderMultipliers() {
   const m = state.metrics;
   if (!m) return;
+  ui.multiplierGrid.style.left = m.left + "px";
   ui.multiplierGrid.style.width = m.boardWidth + "px";
   ui.multiplierGrid.innerHTML = "";
 
@@ -1393,7 +1403,6 @@ function renderUi() {
   ui.balance.textContent = formatMoney(state.balance);
   ui.betInput.value = state.wager;
   ui.ballInput.value = state.ballCount;
-  ui.turboBtn.textContent = state.turbo ? "Turbo on" : "Turbo off";
   ui.soundBtn.textContent = state.sound ? "Sound on" : "Sound off";
   ui.dropBtn.textContent = "Drop " + (state.ballCount > 1 ? state.ballCount : "");
 
@@ -1529,10 +1538,6 @@ function bindEvents() {
   });
 
   ui.dropBtn.addEventListener("click", launchRound);
-  ui.turboBtn.addEventListener("click", () => {
-    state.turbo = !state.turbo;
-    renderUi();
-  });
   ui.soundBtn.addEventListener("click", () => {
     state.sound = !state.sound;
     renderUi();
