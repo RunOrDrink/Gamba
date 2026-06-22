@@ -1495,6 +1495,12 @@ function playTone(frequency, duration, volume) {
   if (!state.sound) return;
   try {
     audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    
+    // FIX: Check if the audio context is suspended (browser autoplay policy)
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
     oscillator.frequency.value = frequency;
@@ -1506,6 +1512,7 @@ function playTone(frequency, duration, volume) {
     gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + duration);
     oscillator.stop(audioContext.currentTime + duration);
   } catch (_error) {
+    // If audio fails for any reason, disable sound silently so the game keeps running
     state.sound = false;
   }
 }
