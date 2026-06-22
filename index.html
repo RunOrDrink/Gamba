@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Gamba Plinko - Desktop Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0f14" />
+    <title>Gamba Plinko</title>
     <style>
 :root {
   --bg: #0b0f14;
@@ -14,35 +16,41 @@
   --green: #22c55e;
   --emerald: #10b981;
   --yellow: #f59e0b;
+  --orange: #fb923c;
   --red: #ef4444;
   --cyan: #06b6d4;
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  --blue: #3b82f6;
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
 }
 
 * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
+html,
 body {
-  width: 1280px;
-  height: 800px;
-  margin: 0 auto;
-  background:
-    radial-gradient(circle at 50% -10%, rgba(6, 182, 212, 0.15), transparent 40%),
-    var(--bg);
-  color: var(--text);
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
-button, input {
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(6, 182, 212, 0.15), transparent 36%),
+    radial-gradient(circle at 10% 35%, rgba(34, 197, 94, 0.08), transparent 28%),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input {
   font: inherit;
-  border: 0;
 }
 
 button {
+  border: 0;
   cursor: pointer;
 }
 
@@ -53,166 +61,211 @@ button:disabled {
 
 .app {
   display: flex;
+  height: 100vh;
+  min-height: 0;
   flex-direction: column;
-  width: 1280px;
-  height: 800px;
-  padding: 20px;
-  gap: 20px;
+  gap: 14px;
+  padding: 14px;
 }
 
-.topbar, .board-panel, .recent-panel, .controls, .control-card, .risk-card, .launch-card, .stats-dialog {
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)), rgba(18, 24, 33, 0.85);
+.topbar,
+.board-panel,
+.recent-panel,
+.controls,
+.control-card,
+.risk-card,
+.launch-card,
+.stats-dialog {
+  border: 1px solid rgba(37, 48, 65, 0.84);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.025)),
+    rgba(18, 24, 33, 0.82);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
+  backdrop-filter: blur(18px);
 }
 
-/* TOPBAR */
 .topbar {
   display: flex;
-  height: 70px;
+  min-height: 66px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  gap: 14px;
+  border-radius: 16px;
+  padding: 12px 16px;
 }
 
 .brand {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .brand-mark {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 14px;
   background: linear-gradient(135deg, var(--emerald), var(--cyan));
   color: #04110a;
-  font-weight: 900;
-  font-size: 1.4rem;
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.3);
+  font-weight: 1000;
+  box-shadow: 0 0 32px rgba(16, 185, 129, 0.35);
+}
+
+h1,
+h2,
+p {
+  margin: 0;
 }
 
 .brand h1 {
-  font-size: 1.2rem;
-  font-weight: 800;
+  font-size: 1.08rem;
+  line-height: 1.1;
+}
+
+.brand p,
+.label,
+.muted,
+.hint {
+  color: var(--muted);
 }
 
 .brand p {
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
+  margin-top: 3px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-.icon-btn, .secondary-btn, .input-row button, .quick-row button, .dialog-head button {
-  height: 42px;
-  padding: 0 16px;
+.icon-btn,
+.secondary-btn,
+.input-row button,
+.quick-row button,
+.dialog-head button {
+  min-height: 42px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
   color: var(--text);
-  font-weight: 700;
-  transition: all 150ms ease;
+  font-weight: 900;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
-.icon-btn:hover, .secondary-btn:hover, .input-row button:hover, .quick-row button:hover {
-  border-color: var(--cyan);
-  background: rgba(255, 255, 255, 0.1);
+.icon-btn {
+  padding: 0 14px;
+}
+
+.icon-btn:hover,
+.secondary-btn:hover,
+.input-row button:hover,
+.quick-row button:hover,
+.dialog-head button:hover {
   transform: translateY(-1px);
+  border-color: var(--cyan);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .balance-card {
-  width: 180px;
-  height: 46px;
+  min-width: 172px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 9px 13px;
   text-align: right;
 }
 
-.balance-card span, .board-stats span, .control-card label, .panel-title h2 {
+.balance-card span,
+.board-stats span,
+.control-card label,
+.panel-title h2 {
   display: block;
   color: var(--muted);
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-size: 0.68rem;
+  font-weight: 1000;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
-.balance-card strong, .board-stats strong {
+.balance-card strong,
+.board-stats strong {
   display: block;
-  font-size: 1rem;
-  font-weight: 700;
+  margin-top: 2px;
+  font-size: 0.92rem;
 }
 
-/* MAIN LAYOUT */
 .layout {
-  display: flex;
-  width: 1240px;
-  height: 520px;
-  gap: 20px;
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+}
+
+.board-panel,
+.recent-panel {
+  min-height: 0;
+  border-radius: 18px;
 }
 
 .board-panel {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  position: relative;
+  overflow: hidden;
 }
 
 .board-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  height: 70px;
+  gap: 12px;
+  padding: 14px 18px 4px;
 }
 
 .active-risks {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 7px;
 }
 
 .risk-pill {
   border: 1px solid currentColor;
-  border-radius: 20px;
-  padding: 2px 10px;
-  font-size: 0.7rem;
-  font-weight: 800;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 1000;
   text-transform: uppercase;
+  box-shadow: 0 0 18px currentColor;
 }
 
 .board-stats {
-  display: flex;
-  gap: 12px;
+  display: grid;
+  min-width: min(420px, 48%);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .board-stats div {
-  width: 150px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 9px 12px;
   text-align: right;
 }
 
 .canvas-wrap {
   position: relative;
-  width: 100%;
-  height: 430px;
+  min-height: 460px;
+  flex: 1;
   overflow: hidden;
 }
 
@@ -225,263 +278,351 @@ button:disabled {
 .multiplier-grid {
   position: absolute;
   left: 0;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  bottom: 14px;
+  display: grid;
+  gap: 3px;
   pointer-events: none;
 }
 
 .multiplier-row {
-  display: flex;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  gap: 3px;
 }
 
 .multiplier-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  display: grid;
+  min-width: 0;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
   color: #fff;
-  font-size: 0.65rem;
-  font-weight: 800;
-  transition: all 120ms ease;
+  font-size: 0.68rem;
+  font-weight: 1000;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.85);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
 .multiplier-cell.dim {
-  opacity: 0.25;
+  opacity: 0.3;
 }
 
 .multiplier-cell.hit {
-  transform: scale(1.05);
-  border-color: #fff;
-  box-shadow: 0 0 12px currentColor;
+  transform: scale(1.07);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.22), 0 0 16px currentColor;
 }
 
-/* SIDE PANEL */
 .recent-panel {
-  width: 280px;
-  height: 100%;
   display: flex;
+  min-height: 0;
   flex-direction: column;
-  padding: 16px;
+  overflow: hidden;
+  padding: 14px;
 }
 
 .panel-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 10px;
+  padding-bottom: 12px;
 }
 
 .panel-title span {
-  border-radius: 20px;
-  background: rgba(34, 197, 94, 0.15);
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.16);
   color: var(--green);
-  padding: 2px 8px;
-  font-weight: 800;
-  font-size: 0.8rem;
+  padding: 4px 9px;
+  font-weight: 1000;
 }
 
 .recent-list {
+  display: grid;
+  min-height: 0;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-content: start;
+  gap: 9px;
   overflow-y: auto;
-  padding-top: 10px;
+  overflow-x: hidden;
+  padding-top: 12px;
 }
 
 .recent-item {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 10px;
 }
 
 .recent-item strong {
   display: flex;
   justify-content: space-between;
-  font-size: 0.85rem;
+  gap: 10px;
+  font-size: 0.92rem;
 }
 
 .recent-item p {
-  margin-top: 3px;
+  margin-top: 5px;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 800;
   text-transform: uppercase;
 }
 
-/* FOOTER CONTROLS */
 .controls {
-  display: flex;
-  width: 1240px;
-  height: 130px;
-  padding: 14px;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: 1fr 0.72fr 1.55fr 0.76fr;
+  gap: 12px;
+  border-radius: 18px;
+  padding: 12px;
 }
 
-.control-card {
-  flex: 1;
+.control-card,
+.risk-card,
+.launch-card {
+  border-radius: 14px;
   padding: 12px;
+  box-shadow: none;
+}
+
+.control-card label {
+  margin-bottom: 9px;
 }
 
 .input-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 8px;
 }
 
 .input-row input {
-  flex: 1;
+  min-width: 0;
   height: 42px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #06090e;
+  border-radius: 12px;
+  background: #070b10;
   color: var(--text);
-  font-weight: 700;
+  font-weight: 1000;
+  outline: 0;
+  padding: 0 12px;
   text-align: center;
 }
 
-.quick-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
+.input-row input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.16);
 }
 
-.quick-row button {
-  flex: 1;
-  height: 28px;
-  font-size: 0.75rem;
-  padding: 0;
+.quick-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.hint {
+  margin-top: 9px;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .risk-card {
-  flex: 1.5;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  padding: 12px;
 }
 
 .risk-btn {
-  flex: 1;
+  min-height: 72px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text);
-  opacity: 0.4;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  transition: all 150ms ease;
+  opacity: 0.38;
+  transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
-.risk-btn span {
-  font-weight: 800;
+.risk-btn span,
+.risk-btn small {
+  display: block;
+  font-weight: 1000;
   text-transform: uppercase;
-  font-size: 0.9rem;
 }
 
 .risk-btn small {
-  font-size: 0.65rem;
-  color: var(--muted);
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
 }
 
 .risk-btn.active {
-  opacity: 1;
   transform: translateY(-2px);
+  opacity: 1;
 }
 
 .risk-btn.green.active {
   border-color: var(--green);
-  background: linear-gradient(180deg, rgba(34,197,94,0.2), transparent);
+  background: linear-gradient(180deg, var(--green), rgba(23, 31, 43, 0.75));
+  box-shadow: 0 0 32px rgba(34, 197, 94, 0.35);
 }
+
 .risk-btn.yellow.active {
   border-color: var(--yellow);
-  background: linear-gradient(180deg, rgba(245,158,11,0.2), transparent);
+  background: linear-gradient(180deg, var(--yellow), rgba(23, 31, 43, 0.75));
+  box-shadow: 0 0 32px rgba(245, 158, 11, 0.32);
 }
+
 .risk-btn.red.active {
   border-color: var(--red);
-  background: linear-gradient(180deg, rgba(239,68,68,0.2), transparent);
+  background: linear-gradient(180deg, var(--red), rgba(23, 31, 43, 0.75));
+  box-shadow: 0 0 32px rgba(239, 68, 68, 0.32);
 }
 
 .launch-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 8px;
-  padding: 12px;
 }
 
 .drop-btn {
-  height: 54px;
-  border-radius: 10px;
+  min-height: 56px;
+  border-radius: 14px;
   background: linear-gradient(135deg, var(--green), var(--cyan));
   color: #04110a;
-  font-weight: 900;
-  font-size: 1.1rem;
+  font-weight: 1000;
   text-transform: uppercase;
-  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 36px rgba(34, 197, 94, 0.36);
+  transition: transform 160ms ease, filter 160ms ease;
 }
 
 .drop-btn:hover {
-  filter: brightness(1.1);
+  transform: translateY(-1px);
+  filter: brightness(1.06);
 }
 
 .secondary-btn {
-  height: 34px;
+  width: 100%;
 }
 
-/* STATS MODAL */
 .stats-dialog {
-  width: 600px;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 20px;
+  width: min(720px, calc(100vw - 28px));
+  border-radius: 18px;
   color: var(--text);
+  padding: 18px;
 }
 
 .stats-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
 }
 
 .dialog-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .stat-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 10px 14px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 12px;
 }
 
 .stat-card span {
-  font-size: 0.65rem;
   color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 1000;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .stat-card strong {
   display: block;
-  font-size: 1.1rem;
-  margin-top: 2px;
+  margin-top: 6px;
+  font-size: 1.08rem;
 }
+
+@media (max-width: 1080px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  .app {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-panel {
+    display: none;
+  }
+
+  .controls {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .app {
+    padding: 10px;
+  }
+
+  .topbar,
+  .board-head,
+  .top-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .balance-card,
+  .board-stats {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .canvas-wrap {
+    min-height: 420px;
+  }
+
+  .controls,
+  .risk-card {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 460px) {
+  .multiplier-cell {
+    height: 23px;
+    font-size: 0.5rem;
+  }
+
+  .canvas-wrap {
+    min-height: 380px;
+  }
+}
+
 </style>
   </head>
   <body>
@@ -491,12 +632,12 @@ button:disabled {
           <div class="brand-mark">G</div>
           <div>
             <h1>Gamba Plinko</h1>
-            <p>Desktop Workspace Only</p>
+            <p>Static GitHub Pages build</p>
           </div>
         </div>
         <div class="top-actions">
-          <button id="soundBtn" class="icon-btn" type="button">Sound</button>
-          <button id="statsBtn" class="icon-btn" type="button">Stats</button>
+          <button id="soundBtn" class="icon-btn" type="button" title="Sound">Sound</button>
+          <button id="statsBtn" class="icon-btn" type="button" title="Stats">Stats</button>
           <div class="balance-card">
             <span>Balance</span>
             <strong><span id="balance">10000.00</span> GAMBA</strong>
@@ -508,7 +649,7 @@ button:disabled {
         <section class="board-panel">
           <div class="board-head">
             <div>
-              <span>Active risks</span>
+              <span class="label">Active risks</span>
               <div id="activeRisks" class="active-risks"></div>
             </div>
             <div class="board-stats">
@@ -536,10 +677,10 @@ button:disabled {
 
       <section class="controls">
         <div class="control-card">
-          <label>Bet per circle</label>
+          <label for="betInput">Bet per circle</label>
           <div class="input-row">
             <button id="betMinus" type="button">-</button>
-            <input id="betInput" type="number" value="10" />
+            <input id="betInput" type="number" min="1" step="1" value="10" />
             <button id="betPlus" type="button">+</button>
           </div>
           <div class="quick-row">
@@ -550,12 +691,13 @@ button:disabled {
         </div>
 
         <div class="control-card">
-          <label>Circles</label>
+          <label for="ballInput">Circles</label>
           <div class="input-row">
             <button id="ballMinus" type="button">-</button>
-            <input id="ballInput" type="number" value="1" />
+            <input id="ballInput" type="number" min="1" max="100" step="1" value="1" />
             <button id="ballPlus" type="button">+</button>
           </div>
+          <p class="hint">Up to 100 per drop</p>
         </div>
 
         <div class="risk-card">
@@ -597,16 +739,25 @@ const CONFIG = {
   startingBalance: 10000,
   risks: {
     green: {
-      label: "Green", color: "#22C55E", glow: "rgba(34,197,94,0.3)",
-      multipliers: [12, 5, 3, 1.4, 1.1, 0.5, 0.3, 0.2, 0.3, 0.5, 1.1, 1.4, 3, 5, 12]
+      label: "Green",
+      color: "#22C55E",
+      glow: "rgba(34,197,94,0.45)",
+      multipliers: [16, 8, 4, 2, 1.5, 1, 0.6, 0.2, 0.6, 1, 1.5, 2, 4, 8, 16],
+      chances: [1, 2, 3, 5, 8, 10, 10, 22, 10, 10, 8, 5, 3, 2, 1]
     },
     yellow: {
-      label: "Yellow", color: "#F59E0B", glow: "rgba(245,158,11,0.3)",
-      multipliers: [35, 11, 6, 3, 1.2, 0.7, 0.2, 0, 0.2, 0.7, 1.2, 3, 6, 11, 35]
+      label: "Yellow",
+      color: "#F59E0B",
+      glow: "rgba(245,158,11,0.45)",
+      multipliers: [60, 15, 8, 4, 2, 1, 0.3, 0, 0.3, 1, 2, 4, 8, 15, 60],
+      chances: [0.1, 0.2, 1, 2, 4, 8, 16, 37.4, 16, 8, 4, 2, 1, 0.2, 0.1]
     },
     red: {
-      label: "Red", color: "#EF4444", glow: "rgba(239,68,68,0.3)",
-      multipliers: [150, 45, 18, 7, 2, 0.5, 0.1, 0, 0.1, 0.5, 2, 7, 18, 45, 150]
+      label: "Red",
+      color: "#EF4444",
+      glow: "rgba(239,68,68,0.48)",
+      multipliers: [300, 80, 25, 10, 3, 1, 0.2, 0, 0.2, 1, 3, 10, 25, 80, 300],
+      chances: [0.01, 0.02, 1, 2, 4, 8, 16, 38, 16, 8, 4, 2, 1, 0.02, 0.01]
     }
   },
   riskOrder: ["green", "yellow", "red"]
@@ -646,7 +797,20 @@ const state = {
   recentRounds: [],
   pendingRounds: new Map(),
   hit: null,
-  stats: { bets: 0, wins: 0, wagered: 0, paid: 0, biggestWin: 0, highestMultiplier: 0, byRisk: { green: emptyRiskStats(), yellow: emptyRiskStats(), red: emptyRiskStats() } },
+  stats: {
+    bets: 0,
+    wins: 0,
+    wagered: 0,
+    paid: 0,
+    biggestWin: 0,
+    highestMultiplier: 0,
+    byRisk: {
+      green: emptyRiskStats(),
+      yellow: emptyRiskStats(),
+      red: emptyRiskStats()
+    }
+  },
+  size: { width: 900, height: 620 },
   metrics: null,
   pegPositions: []
 };
@@ -656,342 +820,552 @@ let ballId = 1;
 let roundId = 1;
 
 function emptyRiskStats() {
-  return { bets: 0, wins: 0, wagered: 0, paid: 0, biggestWin: 0, highestMultiplier: 0 };
+  return {
+    bets: 0,
+    wins: 0,
+    wagered: 0,
+    paid: 0,
+    biggestWin: 0,
+    highestMultiplier: 0
+  };
 }
 
-function formatMoney(v) { return Number(v).toFixed(2); }
-function formatMultiplier(v) { return v + "x"; }
-function riskConfig(r) { return CONFIG.risks[r]; }
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
 
-function initCanvasSize() {
+function formatMoney(value) {
+  return Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function formatMultiplier(value) {
+  return Number.isInteger(value) ? value + "x" : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "") + "x";
+}
+
+function riskConfig(risk) {
+  return CONFIG.risks[risk];
+}
+
+function chooseWeightedSlot(risk) {
+  const chances = riskConfig(risk).chances;
+  let cursor = Math.random() * 100;
+
+  for (let index = 0; index < chances.length; index += 1) {
+    cursor -= chances[index];
+    if (cursor <= 0) return index;
+  }
+
+  return chances.length - 1;
+}
+
+function normalizeBallCount(value) {
+  const riskCount = state.activeRisks.length || 1;
+  let count = Math.round(clamp(Number(value) || 1, riskCount, CONFIG.maxBalls));
+
+  if (riskCount > 1) {
+    const nextMultiple = Math.ceil(count / riskCount) * riskCount;
+    count = nextMultiple <= CONFIG.maxBalls ? nextMultiple : Math.floor(CONFIG.maxBalls / riskCount) * riskCount;
+  }
+
+  return clamp(count, 1, CONFIG.maxBalls);
+}
+
+function riskSequence(count) {
+  const ordered = CONFIG.riskOrder.filter((risk) => state.activeRisks.includes(risk));
+  return Array.from({ length: count }, (_, index) => ordered[index % ordered.length]);
+}
+
+function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width;
-  canvas.height = rect.height;
-  calculateBoard(rect.width, rect.height);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  state.size = { width: rect.width, height: rect.height };
+  calculateBoard();
   renderMultipliers();
 }
 
-function calculateBoard(w, h) {
-  const boardWidth = 640;
-  const centerX = w / 2;
+function calculateBoard() {
+  const width = state.size.width;
+  const height = state.size.height;
+  const boardWidth = clamp(Math.min(width * 0.76, 780), 300, Math.max(300, width - 34));
+  const centerX = width / 2;
   const left = centerX - boardWidth / 2;
   const slotCount = CONFIG.rows + 1;
   const slotWidth = boardWidth / slotCount;
-  
-  const slotBottom = h - 10;
-  const pocketHeight = 26;
+  const multiplierReserve = width < 520 ? 92 : 108;
+  const slotBottom = height - multiplierReserve;
+  const pocketHeight = width < 520 ? 30 : 38;
   const slotTop = slotBottom - pocketHeight;
-  
-  const rowGap = 24;
+  const rowGap = Math.min((slotTop - 58) / CONFIG.rows, (boardWidth / CONFIG.rows) * 0.72);
   const pegGap = slotWidth;
-  const top = 30;
+  const lastPegY = slotTop - rowGap * 0.42;
+  const top = lastPegY - (CONFIG.rows - 1) * rowGap;
+  const pegRadius = clamp(pegGap * 0.105, 3.2, 5.2);
+  const ballRadius = clamp(pegGap * 0.19, 7.5, 10.5);
 
   const pegPositions = [];
-  for (let row = 0; row < CONFIG.rows; row++) {
+  for (let row = 0; row < CONFIG.rows; row += 1) {
     const count = row + 2;
     const y = top + row * rowGap;
     const startX = centerX - ((count - 1) * pegGap) / 2;
-    for (let i = 0; i < count; i++) {
-      pegPositions.push({ id: `p-${row}-${i}`, x: startX + i * pegGap, y, row });
+
+    for (let index = 0; index < count; index += 1) {
+      pegPositions.push({ x: startX + index * pegGap, y, row });
     }
   }
 
   state.metrics = {
-    left, centerX, boardWidth, top, pegGap, rowGap,
-    pegRadius: 3.8, ballRadius: 10.5, slotCount, slotWidth, slotTop, slotBottom
+    left,
+    centerX,
+    boardWidth,
+    top,
+    lastPegY,
+    pegGap,
+    rowGap,
+    pegRadius,
+    ballRadius,
+    slotCount,
+    slotWidth,
+    slotTop,
+    slotBottom,
+    pocketHeight
   };
   state.pegPositions = pegPositions;
 }
 
-function launchRound() {
-  let count = Math.min(CONFIG.maxBalls, Math.max(1, parseInt(ui.ballInput.value) || 1));
-  let wager = Math.max(1, parseInt(ui.betInput.value) || 1);
-  
-  if (wager * count > state.balance) {
-    count = Math.floor(state.balance / wager);
-    if (count < 1) {
-      wager = Math.floor(state.balance);
-      count = 1;
+function seededRandom(seed) {
+  let value = Math.sin(seed + 1) * 10000;
+  return function random() {
+    value = Math.sin(value + 1.61803398875) * 10000;
+    return value - Math.floor(value);
+  };
+}
+
+function makePath(targetSlot, seed) {
+  const m = state.metrics;
+  const random = seededRandom(seed);
+  const targetX = m.left + m.slotWidth * (targetSlot + 0.5);
+  const points = [
+    {
+      x: m.centerX + (random() - 0.5) * m.pegGap * 0.16,
+      y: m.top - m.rowGap * 1.45
     }
+  ];
+
+  let rights = 0;
+  let previousMove = 0;
+
+  for (let step = 1; step <= CONFIG.rows; step += 1) {
+    const pegY = m.top + (step - 1) * m.rowGap;
+    const beforeRights = rights;
+    const rowsLeftAfterThis = CONFIG.rows - step;
+    const rightsStillNeeded = targetSlot - beforeRights;
+    let moveRight;
+
+    if (rightsStillNeeded <= 0) {
+      moveRight = false;
+    } else if (rightsStillNeeded > rowsLeftAfterThis) {
+      moveRight = true;
+    } else {
+      const pressure = rightsStillNeeded / (rowsLeftAfterThis + 1);
+      const antiStreak = previousMove === 1 ? -0.1 : previousMove === -1 ? 0.1 : 0;
+      moveRight = random() < clamp(pressure + antiStreak, 0.18, 0.82);
+    }
+
+    rights += moveRight ? 1 : 0;
+    previousMove = moveRight ? 1 : -1;
+
+    const bounceSide = moveRight ? 1 : -1;
+    const pegX = m.centerX + (beforeRights - (step - 1) / 2 + bounceSide * 0.5) * m.pegGap;
+    const contactClearance = m.ballRadius + m.pegRadius + 4.8;
+    const outerMin = m.left - m.slotWidth * 0.08;
+    const outerMax = m.left + m.boardWidth + m.slotWidth * 0.08;
+    const approachX = pegX + bounceSide * contactClearance * 0.58;
+    const approachY = pegY - contactClearance * 0.82;
+    const arcX = pegX + bounceSide * contactClearance * 1.12;
+    const arcY = pegY - contactClearance * 0.05;
+    const exitX = pegX + bounceSide * contactClearance * 0.9;
+    const exitY = pegY + contactClearance * 0.54;
+    const laneX = m.centerX + (rights - step / 2) * m.pegGap;
+    const laneJitter = (random() - 0.5) * m.pegGap * 0.07;
+
+    points.push({
+      x: clamp(approachX, outerMin, outerMax),
+      y: approachY
+    });
+
+    points.push({
+      x: clamp(arcX, outerMin, outerMax),
+      y: arcY
+    });
+
+    points.push({
+      x: clamp(exitX, outerMin, outerMax),
+      y: exitY
+    });
+
+    points.push({
+      x: clamp(exitX + bounceSide * contactClearance * 0.22, outerMin, outerMax),
+      y: pegY + m.rowGap * 0.28
+    });
+
+    points.push({
+      x: clamp(laneX + laneJitter, m.left + m.slotWidth * 0.28, m.left + m.boardWidth - m.slotWidth * 0.28),
+      y: pegY + m.rowGap * 0.52
+    });
+  }
+
+  points.push({
+    x: targetX + (random() - 0.5) * m.slotWidth * 0.08,
+    y: m.slotTop + m.pocketHeight * 0.46
+  });
+
+  return preparePath(points);
+}
+
+function preparePath(points) {
+  let total = 0;
+  const segments = [];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const a = points[index];
+    const b = points[index + 1];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    total += length;
+    segments.push({ a, b, length, end: total });
+  }
+
+  return { points, segments, total };
+}
+
+function positionOnPath(path, t, wobbleSeed) {
+  const distance = clamp(t, 0, 1) * path.total;
+  const segment = path.segments.find((item) => distance <= item.end) || path.segments[path.segments.length - 1];
+  const startDistance = segment.end - segment.length;
+  const local = segment.length ? (distance - startDistance) / segment.length : 1;
+  const ease = local;
+  const x = segment.a.x + (segment.b.x - segment.a.x) * ease;
+  const y = segment.a.y + (segment.b.y - segment.a.y) * ease;
+  const dx = segment.b.x - segment.a.x;
+  const dy = segment.b.y - segment.a.y;
+  const length = Math.max(1, Math.hypot(dx, dy));
+  const normalX = -dy / length;
+  const normalY = dx / length;
+  const wobble = Math.sin(t * Math.PI * 34 + wobbleSeed) * (1 - t) * 0.22;
+
+  return {
+    x: x + normalX * wobble,
+    y: y + normalY * wobble
+  };
+}
+
+function launchRound() {
+  state.ballCount = normalizeBallCount(ui.ballInput.value);
+  ui.ballInput.value = state.ballCount;
+
+  let wager = Math.max(1, Math.floor(Number(ui.betInput.value) || state.wager));
+  const totalRequested = wager * state.ballCount;
+
+  if (totalRequested > state.balance) {
+    wager = Math.floor(state.balance / state.ballCount);
     if (wager < 1) return;
+    ui.betInput.value = wager;
   }
 
   state.wager = wager;
-  state.ballCount = count;
-  state.balance -= wager * count;
+  const stake = wager * state.ballCount;
+  state.balance -= stake;
 
-  const rId = "r-" + roundId++;
-  const round = { id: rId, stake: wager * count, payout: 0, completed: 0, ballCount: count, risks: [], bestMultiplier: 0 };
-  state.pendingRounds.set(rId, round);
+  const id = "round-" + roundId;
+  roundId += 1;
 
-  const activeOrdered = CONFIG.riskOrder.filter(r => state.activeRisks.includes(r));
-  
-  for (let i = 0; i < count; i++) {
-    const risk = activeOrdered[i % activeOrdered.length];
-    setTimeout(() => spawnBall(rId, risk, wager), i * 60);
-  }
+  const round = {
+    id,
+    stake,
+    payout: 0,
+    completed: 0,
+    ballCount: state.ballCount,
+    risks: [],
+    bestMultiplier: 0,
+    startedAt: Date.now()
+  };
+  state.pendingRounds.set(id, round);
 
-  playTone(180, 0.05, 0.05);
+  const risks = riskSequence(state.ballCount);
+  const spawnGap = 48;
+
+  risks.forEach((risk, index) => {
+    window.setTimeout(() => spawnBall(id, risk, wager, index), index * spawnGap);
+  });
+
+  playTone(160, 0.055, 0.04);
   renderUi();
 }
 
-function spawnBall(round, risk, wager) {
-  const m = state.metrics;
-  const side = Math.random() < 0.5 ? -1 : 1;
-  const startX = m.centerX + side * (4 + Math.random() * 5);
-  const startY = m.top - m.rowGap * 1.15;
+function spawnBall(round, risk, wager, index) {
+  const slot = chooseWeightedSlot(risk);
+  const config = riskConfig(risk);
+  const multiplier = config.multipliers[slot];
+  const seed = Math.random() * 1000 + index * 0.113;
+  const path = makePath(slot, seed);
 
   state.balls.push({
-    id: ballId++, round, risk, wager, color: riskConfig(risk).color,
-    x: startX, y: startY, vx: side * (0.16 + Math.random() * 0.12), vy: 0.18 + Math.random() * 0.1,
-    trail: [], settled: false, hitCooldowns: Object.create(null), stuckFrames: 0, lastX: startX, lastY: startY
+    id: ballId,
+    round,
+    risk,
+    slot,
+    multiplier,
+    wager,
+    payout: Math.round(wager * multiplier * 100) / 100,
+    color: config.color,
+    path,
+    start: performance.now(),
+    duration: 2700 + Math.random() * 360,
+    trail: [],
+    nextHit: 0,
+    settled: false,
+    wobbleSeed: seed
   });
+  ballId += 1;
 }
 
 function settleBall(ball) {
+  if (ball.settled) return;
   ball.settled = true;
   state.balance += ball.payout;
-  state.hit = { risk: ball.risk, slot: ball.slot, until: performance.now() + 400 };
+  state.hit = { risk: ball.risk, slot: ball.slot, until: performance.now() + 520 };
 
   const win = ball.payout > ball.wager;
-  const stats = state.stats;
-  const rStats = state.stats.byRisk[ball.risk];
-
-  [stats, rStats].forEach(s => {
-    s.bets++;
-    if (win) s.wins++;
-    s.wagered += ball.wager;
-    s.paid += ball.payout;
-    s.biggestWin = Math.max(s.biggestWin, ball.payout);
-    s.highestMultiplier = Math.max(s.highestMultiplier, ball.multiplier);
-  });
+  const riskStats = state.stats.byRisk[ball.risk];
+  updateStats(state.stats, ball, win);
+  updateStats(riskStats, ball, win);
 
   const round = state.pendingRounds.get(ball.round);
   if (round) {
-    round.payout += ball.payout;
-    round.completed++;
+    round.payout = Math.round((round.payout + ball.payout) * 100) / 100;
+    round.completed += 1;
     round.bestMultiplier = Math.max(round.bestMultiplier, ball.multiplier);
     if (!round.risks.includes(ball.risk)) round.risks.push(ball.risk);
 
     if (round.completed >= round.ballCount) {
       state.pendingRounds.delete(round.id);
-      round.profit = round.payout - round.stake;
+      round.profit = Math.round((round.payout - round.stake) * 100) / 100;
       state.recentRounds.unshift(round);
-      state.recentRounds = state.recentRounds.slice(0, 10);
-      
+      state.recentRounds = state.recentRounds.slice(0, 8);
       ui.lastResult.textContent = formatMultiplier(round.bestMultiplier) + " / " + formatMoney(round.payout);
-      ui.profit.textContent = (round.profit >= 0 ? "+" : "") + formatMoney(round.profit);
-      ui.profit.style.color = round.profit >= 0 ? "var(--green)" : "var(--red)";
+      ui.profit.textContent = (round.profit >= 0 ? "+" : "") + formatMoney(round.profit) + " GAMBA";
     }
   }
 
-  playTone(ball.multiplier >= 5 ? 440 : 280, 0.1, 0.04);
+  playTone(ball.multiplier >= 10 ? 520 : 320, ball.multiplier >= 10 ? 0.18 : 0.08, 0.04);
   renderMultipliers();
   renderUi();
 }
 
-function tick() {
-  updatePhysics();
-  draw();
+function updateStats(stats, ball, win) {
+  stats.bets += 1;
+  stats.wins += win ? 1 : 0;
+  stats.wagered = Math.round((stats.wagered + ball.wager) * 100) / 100;
+  stats.paid = Math.round((stats.paid + ball.payout) * 100) / 100;
+  stats.biggestWin = Math.max(stats.biggestWin, ball.payout);
+  stats.highestMultiplier = Math.max(stats.highestMultiplier, ball.multiplier);
+}
+
+function tick(now) {
+  updateBalls(now);
+  updateParticles(now);
+  draw(now);
   requestAnimationFrame(tick);
 }
 
-function updatePhysics() {
-  const m = state.metrics;
-  if (!m) return;
-
-  const GRAVITY = 0.18;
-  const RESTITUTION = 0.58;
-  const WALL_RESTITUTION = 0.38;
-  const AIR_DRAG = 0.997;
-  const TANGENT_FRICTION = 0.985;
-  const MAX_SPEED = 7.8;
-  const SUBSTEPS = 4;
-  const COLLISION_SLOP = 0.04;
-
-  state.balls.forEach(ball => {
+function updateBalls(now) {
+  state.balls.forEach((ball) => {
     if (ball.settled) return;
+    const t = clamp((now - ball.start) / ball.duration, 0, 1);
+    const position = positionOnPath(ball.path, t, ball.wobbleSeed);
+    ball.position = position;
+    ball.trail.push(position);
+    if (ball.trail.length > 9) ball.trail.shift();
 
-    for (let step = 0; step < SUBSTEPS; step++) {
-      ball.vy += GRAVITY / SUBSTEPS;
-      ball.vx *= AIR_DRAG;
-      ball.vy *= AIR_DRAG;
-
-      const speed = Math.hypot(ball.vx, ball.vy);
-      if (speed > MAX_SPEED) {
-        const scale = MAX_SPEED / speed;
-        ball.vx *= scale;
-        ball.vy *= scale;
-      }
-
-      ball.x += ball.vx / SUBSTEPS;
-      ball.y += ball.vy / SUBSTEPS;
-
-      if (ball.x - m.ballRadius < m.left) {
-        ball.x = m.left + m.ballRadius;
-        if (ball.vx < 0) ball.vx = -ball.vx * WALL_RESTITUTION;
-      } else if (ball.x + m.ballRadius > m.left + m.boardWidth) {
-        ball.x = m.left + m.boardWidth - m.ballRadius;
-        if (ball.vx > 0) ball.vx = -ball.vx * WALL_RESTITUTION;
-      }
-
-      for (let pass = 0; pass < 2; pass++) {
-        for (let i = 0; i < state.pegPositions.length; i++) {
-          const peg = state.pegPositions[i];
-
-          if (Math.abs(peg.y - ball.y) > m.rowGap || Math.abs(peg.x - ball.x) > m.pegGap) {
-            continue;
-          }
-
-          let dx = ball.x - peg.x;
-          let dy = ball.y - peg.y;
-          let dist = Math.hypot(dx, dy);
-          const minDist = m.ballRadius + m.pegRadius;
-
-          if (dist < minDist) {
-            if (dist < 0.0001) {
-              dx = Math.random() < 0.5 ? -0.001 : 0.001;
-              dy = -0.001;
-              dist = Math.hypot(dx, dy);
-            }
-
-            const nx = dx / dist;
-            const ny = dy / dist;
-            const overlap = minDist - dist + COLLISION_SLOP;
-
-            ball.x += nx * overlap;
-            ball.y += ny * overlap;
-
-            const normalVelocity = ball.vx * nx + ball.vy * ny;
-
-            if (normalVelocity < 0) {
-              const tx = -ny;
-              const ty = nx;
-              const tangentVelocity = ball.vx * tx + ball.vy * ty;
-              const nextNormalVelocity = -normalVelocity * RESTITUTION;
-              const nextTangentVelocity = tangentVelocity * TANGENT_FRICTION;
-
-              ball.vx = nx * nextNormalVelocity + tx * nextTangentVelocity;
-              ball.vy = ny * nextNormalVelocity + ty * nextTangentVelocity;
-
-              if (Math.abs(ball.vx) < 0.08) {
-                ball.vx += (Math.random() < 0.5 ? -1 : 1) * 0.18;
-              } else {
-                ball.vx += (Math.random() - 0.5) * 0.045;
-              }
-
-              if (ny < -0.72 && Math.abs(nx) < 0.34) {
-                ball.vx += (Math.random() < 0.5 ? -1 : 1) * (0.42 + Math.random() * 0.2);
-              }
-            }
-
-            if (!ball.hitCooldowns[peg.id]) {
-              ball.hitCooldowns[peg.id] = 8;
-              state.pulses.push({ x: peg.x, y: peg.y, color: ball.color, life: 1.0 });
-              if (Math.random() < 0.22) playTone(290 + (peg.row * 16), 0.018, 0.018);
-            }
-          }
-        }
-      }
-
-      if (ball.y >= m.slotTop) break;
+    while (ball.nextHit < CONFIG.rows) {
+      const pegY = state.metrics.top + ball.nextHit * state.metrics.rowGap;
+      if (position.y < pegY) break;
+      addPegHit(position.x, pegY, ball.risk);
+      ball.nextHit += 1;
     }
 
-    Object.keys(ball.hitCooldowns).forEach(id => {
-      ball.hitCooldowns[id] -= 1;
-      if (ball.hitCooldowns[id] <= 0) delete ball.hitCooldowns[id];
-    });
-
-    ball.trail.push({ x: ball.x, y: ball.y });
-    if (ball.trail.length > 8) ball.trail.shift();
-
-    const frameMove = Math.hypot(ball.x - ball.lastX, ball.y - ball.lastY);
-    const speedNow = Math.hypot(ball.vx, ball.vy);
-    if (ball.y < m.slotTop - m.rowGap && frameMove < 0.045 && speedNow < 0.16) {
-      ball.stuckFrames += 1;
-    } else {
-      ball.stuckFrames = 0;
-    }
-
-    if (ball.stuckFrames > 8) {
-      ball.vx += (Math.random() < 0.5 ? -1 : 1) * 0.55;
-      ball.vy += 0.45;
-      ball.stuckFrames = 0;
-    }
-
-    ball.lastX = ball.x;
-    ball.lastY = ball.y;
-
-    // Capture point trigger at slot intersection line
-    if (ball.y + m.ballRadius >= m.slotTop) {
-      const relX = ball.x - m.left;
-      let slot = Math.floor(relX / m.slotWidth);
-      slot = Math.max(0, Math.min(m.slotCount - 1, slot));
-      
-      ball.slot = slot;
-      ball.multiplier = riskConfig(ball.risk).multipliers[slot];
-      ball.payout = ball.wager * ball.multiplier;
-      settleBall(ball);
-    }
+    if (t >= 1) settleBall(ball);
   });
 
-  state.balls = state.balls.filter(b => !b.settled);
-  state.pulses = state.pulses.map(p => ({ ...p, life: p.life - 0.08 })).filter(p => p.life > 0);
+  state.balls = state.balls.filter((ball) => !ball.settled || now - (state.hit ? state.hit.until : 0) < 800);
 }
 
-function draw() {
-  const w = canvas.width;
-  const h = canvas.height;
+function addPegHit(x, y, risk) {
+  const nearest = state.pegPositions.reduce((best, peg) => {
+    if (!best) return peg;
+    return Math.hypot(peg.x - x, peg.y - y) < Math.hypot(best.x - x, best.y - y) ? peg : best;
+  }, null);
+
+  if (!nearest) return;
+
+  state.pulses.push({
+    x: nearest.x,
+    y: nearest.y,
+    color: riskConfig(risk).color,
+    life: 1
+  });
+
+  for (let index = 0; index < 4; index += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    state.particles.push({
+      x: nearest.x,
+      y: nearest.y,
+      vx: Math.cos(angle) * (0.5 + Math.random() * 0.9),
+      vy: Math.sin(angle) * (0.5 + Math.random() * 0.9),
+      color: riskConfig(risk).color,
+      life: 1
+    });
+  }
+
+  if (Math.random() < 0.2) playTone(220 + Math.random() * 160, 0.02, 0.012);
+}
+
+function updateParticles() {
+  state.particles = state.particles
+    .map((particle) => ({
+      ...particle,
+      x: particle.x + particle.vx,
+      y: particle.y + particle.vy,
+      vy: particle.vy + 0.035,
+      life: particle.life - 0.035
+    }))
+    .filter((particle) => particle.life > 0);
+
+  state.pulses = state.pulses
+    .map((pulse) => ({ ...pulse, life: pulse.life - 0.05 }))
+    .filter((pulse) => pulse.life > 0);
+}
+
+function draw(now) {
+  const width = state.size.width;
+  const height = state.size.height;
   const m = state.metrics;
   if (!m) return;
 
-  ctx.fillStyle = "#0c111a";
-  ctx.fillRect(0, 0, w, h);
+  const bg = ctx.createLinearGradient(0, 0, width, height);
+  bg.addColorStop(0, "#080d13");
+  bg.addColorStop(0.5, "#101926");
+  bg.addColorStop(1, "#070b10");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
 
-  // Vertical Slot Dividing Lines
-  ctx.strokeStyle = "rgba(37, 48, 65, 0.5)";
-  ctx.lineWidth = 1.5;
-  for (let i = 0; i <= m.slotCount; i++) {
-    const x = m.left + i * m.slotWidth;
+  const glow = ctx.createRadialGradient(width / 2, height * 0.28, 20, width / 2, height * 0.36, height * 0.58);
+  glow.addColorStop(0, "rgba(6,182,212,0.18)");
+  glow.addColorStop(0.6, "rgba(34,197,94,0.045)");
+  glow.addColorStop(1, "rgba(6,182,212,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, height);
+
+  drawBoardLines(m);
+  drawPegs(m);
+  drawParticles();
+  drawBalls(now, m);
+}
+
+function drawBoardLines(m) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(148,163,184,0.34)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(m.left, m.slotTop);
+  ctx.lineTo(m.left + m.boardWidth, m.slotTop);
+  ctx.stroke();
+
+  for (let index = 0; index <= m.slotCount; index += 1) {
+    const x = m.left + index * m.slotWidth;
     ctx.beginPath();
     ctx.moveTo(x, m.slotTop);
     ctx.lineTo(x, m.slotBottom);
     ctx.stroke();
   }
 
-  // Draw Dynamic Pin Grid
-  state.pegPositions.forEach(peg => {
-    const pulse = state.pulses.find(p => Math.hypot(p.x - peg.x, p.y - peg.y) < 10);
-    
-    if (pulse) {
-      ctx.fillStyle = pulse.color;
-      ctx.globalAlpha = pulse.life * 0.4;
-      ctx.beginPath();
-      ctx.arc(peg.x, peg.y, m.pegRadius * 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1.0;
-    }
+  ctx.restore();
+}
 
-    ctx.fillStyle = "#ffffff";
+function drawPegs(m) {
+  state.pegPositions.forEach((peg) => {
+    const pulse = state.pulses.find((item) => Math.hypot(item.x - peg.x, item.y - peg.y) < m.pegRadius * 2);
+    const radius = m.pegRadius;
+
+    const glow = ctx.createRadialGradient(peg.x, peg.y, 1, peg.x, peg.y, radius * (pulse ? 7 : 4.4));
+    glow.addColorStop(0, pulse ? "rgba(255,255,255,0.52)" : "rgba(255,255,255,0.22)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(peg.x, peg.y, m.pegRadius, 0, Math.PI * 2);
+    ctx.arc(peg.x, peg.y, radius * (pulse ? 7 : 4.4), 0, Math.PI * 2);
     ctx.fill();
-  });
 
-  // Draw Physics Circles
-  state.balls.forEach(ball => {
-    ctx.fillStyle = ball.color;
-    ctx.shadowColor = ball.color;
-    ctx.shadowBlur = 8;
+    ctx.fillStyle = "#f8fafc";
     ctx.beginPath();
-    ctx.arc(ball.x, ball.y, m.ballRadius, 0, Math.PI * 2);
+    ctx.arc(peg.x, peg.y, radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = "#ffffff";
+    ctx.strokeStyle = "rgba(100,116,139,0.72)";
     ctx.lineWidth = 1;
     ctx.stroke();
   });
+}
+
+function drawParticles() {
+  state.particles.forEach((particle) => {
+    ctx.globalAlpha = particle.life;
+    ctx.fillStyle = particle.color;
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, 2.2 * particle.life, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawBalls(now, m) {
+  state.balls.forEach((ball) => {
+    if (!ball.position || ball.settled) return;
+    const radius = m.ballRadius;
+
+    ball.trail.forEach((point, index) => {
+      const alpha = index / Math.max(1, ball.trail.length);
+      ctx.globalAlpha = alpha * 0.18;
+      ctx.fillStyle = ball.color;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius * alpha * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    ctx.shadowColor = ball.color;
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = ball.color;
+    ctx.beginPath();
+    ctx.arc(ball.position.x, ball.position.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,0.88)";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(ball.position.x, ball.position.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  if (state.hit && now > state.hit.until) {
+    state.hit = null;
+    renderMultipliers();
+  }
 }
 
 function renderMultipliers() {
@@ -1001,22 +1375,26 @@ function renderMultipliers() {
   ui.multiplierGrid.style.width = m.boardWidth + "px";
   ui.multiplierGrid.innerHTML = "";
 
-  CONFIG.riskOrder.forEach(risk => {
-    if (!state.activeRisks.includes(risk)) return;
+  CONFIG.riskOrder.forEach((risk) => {
     const config = riskConfig(risk);
     const row = document.createElement("div");
     row.className = "multiplier-row";
 
-    config.multipliers.forEach((mult, idx) => {
+    config.multipliers.forEach((multiplier, index) => {
       const cell = document.createElement("div");
-      const isHit = state.hit && state.hit.risk === risk && state.hit.slot === idx;
-      cell.className = "multiplier-cell" + (isHit ? " hit" : "");
-      cell.style.width = `${m.slotWidth - 2}px`;
-      cell.style.backgroundColor = config.color;
-      if (isHit) cell.style.color = "#000000";
-      cell.textContent = mult + "x";
+      const active = state.activeRisks.includes(risk);
+      const hit = state.hit && state.hit.risk === risk && state.hit.slot === index;
+      cell.className = "multiplier-cell" + (active ? "" : " dim") + (hit ? " hit" : "");
+      cell.style.background = hit
+        ? "linear-gradient(180deg, rgba(255,255,255,0.18), " + config.color + " 42%, rgba(11,15,20,0.84))"
+        : "linear-gradient(180deg, " + config.color + ", rgba(11,15,20,0.72))";
+      cell.style.color = "#ffffff";
+      cell.style.borderColor = hit ? "rgba(255,255,255,0.9)" : config.color + "66";
+      cell.style.boxShadow = hit ? "0 0 18px " + config.glow : "0 0 6px " + config.glow;
+      cell.textContent = formatMultiplier(multiplier);
       row.appendChild(cell);
     });
+
     ui.multiplierGrid.appendChild(row);
   });
 }
@@ -1025,14 +1403,15 @@ function renderUi() {
   ui.balance.textContent = formatMoney(state.balance);
   ui.betInput.value = state.wager;
   ui.ballInput.value = state.ballCount;
+  ui.soundBtn.textContent = state.sound ? "Sound on" : "Sound off";
   ui.dropBtn.textContent = "Drop " + (state.ballCount > 1 ? state.ballCount : "");
 
-  document.querySelectorAll(".risk-btn").forEach(btn => {
-    btn.classList.toggle("active", state.activeRisks.includes(btn.dataset.risk));
+  document.querySelectorAll(".risk-btn").forEach((button) => {
+    button.classList.toggle("active", state.activeRisks.includes(button.dataset.risk));
   });
 
   ui.activeRisks.innerHTML = "";
-  state.activeRisks.forEach(risk => {
+  state.activeRisks.forEach((risk) => {
     const pill = document.createElement("span");
     pill.className = "risk-pill";
     pill.style.color = riskConfig(risk).color;
@@ -1040,99 +1419,174 @@ function renderUi() {
     ui.activeRisks.appendChild(pill);
   });
 
+  renderRecent();
+  renderMultipliers();
+}
+
+function renderRecent() {
   ui.roundCount.textContent = state.recentRounds.length;
   ui.recentList.innerHTML = "";
-  if (state.recentRounds.length === 0) {
-    ui.recentList.innerHTML = '<p class="muted">No rounds yet.</p>';
-  } else {
-    state.recentRounds.forEach(r => {
-      const div = document.createElement("div");
-      div.className = "recent-item";
-      const color = r.profit >= 0 ? "var(--green)" : "var(--red)";
-      div.innerHTML = `
-        <strong style="color:${color}"><span>${r.profit >= 0 ? "+" : ""}${formatMoney(r.profit)}</span><span>${formatMoney(r.payout)}</span></strong>
-        <p>${r.ballCount} circles • stake ${formatMoney(r.stake)} • best ${r.bestMultiplier}x</p>
-      `;
-      ui.recentList.appendChild(div);
-    });
+
+  if (!state.recentRounds.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No rounds yet.";
+    ui.recentList.appendChild(empty);
+    return;
   }
+
+  state.recentRounds.forEach((round) => {
+    const item = document.createElement("div");
+    item.className = "recent-item";
+    const profitColor = round.profit >= 0 ? "var(--green)" : "var(--red)";
+    const riskText = round.risks.map((risk) => riskConfig(risk).label).join(" / ");
+    item.innerHTML =
+      "<strong style=\"color:" + profitColor + "\"><span>" +
+      (round.profit >= 0 ? "+" : "") + formatMoney(round.profit) +
+      "</span><span>" + formatMoney(round.payout) + "</span></strong>" +
+      "<p>" + round.ballCount + " circles - stake " + formatMoney(round.stake) + " - best " + formatMultiplier(round.bestMultiplier) + "</p>" +
+      "<p>" + riskText + "</p>";
+    ui.recentList.appendChild(item);
+  });
 }
 
 function renderStats() {
   const rows = [
-    ["Total Bets", state.stats.bets],
-    ["Total Wins", state.stats.wins],
+    ["Total bets", state.stats.bets],
+    ["Total wins", state.stats.wins],
     ["Wagered", formatMoney(state.stats.wagered)],
-    ["Paid out", formatMoney(state.stats.paid)],
-    ["Max Payout", formatMoney(state.stats.biggestWin)],
-    ["Top Multiplier", formatMultiplier(state.stats.highestMultiplier)]
+    ["Paid", formatMoney(state.stats.paid)],
+    ["Biggest win", formatMoney(state.stats.biggestWin)],
+    ["Highest multiplier", formatMultiplier(state.stats.highestMultiplier || 0)]
   ];
+
+  CONFIG.riskOrder.forEach((risk) => {
+    const stats = state.stats.byRisk[risk];
+    rows.push([riskConfig(risk).label + " paid", formatMoney(stats.paid)]);
+  });
+
   ui.statsGrid.innerHTML = "";
-  rows.forEach(([label, val]) => {
+  rows.forEach(([label, value]) => {
     const card = document.createElement("div");
     card.className = "stat-card";
-    card.innerHTML = `<span>${label}</span><strong>${val}</strong>`;
+    card.innerHTML = "<span>" + label + "</span><strong>" + value + "</strong>";
     ui.statsGrid.appendChild(card);
   });
 }
 
-function playTone(freq, dur, vol) {
+function playTone(frequency, duration, volume) {
   if (!state.sound) return;
   try {
     audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-    const osc = audioContext.createOscillator();
+    const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
-    osc.frequency.value = freq;
-    osc.type = "sine";
-    gain.gain.setValueAtTime(vol, audioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + dur);
-    osc.connect(gain);
+    oscillator.frequency.value = frequency;
+    oscillator.type = "sine";
+    gain.gain.value = volume;
+    oscillator.connect(gain);
     gain.connect(audioContext.destination);
-    osc.start();
-    osc.stop(audioContext.currentTime + dur);
-  } catch(e) { state.sound = false; }
+    oscillator.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + duration);
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch (_error) {
+    state.sound = false;
+  }
+}
+
+function resetDemo() {
+  state.balance = CONFIG.startingBalance;
+  state.wager = 10;
+  state.ballCount = 1;
+  state.activeRisks = ["green"];
+  state.balls = [];
+  state.particles = [];
+  state.pulses = [];
+  state.recentRounds = [];
+  state.pendingRounds.clear();
+  state.hit = null;
+  state.stats = {
+    bets: 0,
+    wins: 0,
+    wagered: 0,
+    paid: 0,
+    biggestWin: 0,
+    highestMultiplier: 0,
+    byRisk: {
+      green: emptyRiskStats(),
+      yellow: emptyRiskStats(),
+      red: emptyRiskStats()
+    }
+  };
+  ui.lastResult.textContent = "Ready";
+  ui.profit.textContent = "0.00 GAMBA";
+  renderUi();
 }
 
 function bindEvents() {
-  ui.dropBtn.addEventListener("click", launchRound);
-  ui.soundBtn.addEventListener("click", () => { state.sound = !state.sound; ui.soundBtn.textContent = state.sound ? "Sound" : "Muted"; });
-  ui.resetBtn.addEventListener("click", () => {
-    state.balance = CONFIG.startingBalance;
-    state.recentRounds = [];
-    state.stats = { bets: 0, wins: 0, wagered: 0, paid: 0, biggestWin: 0, highestMultiplier: 0, byRisk: { green: emptyRiskStats(), yellow: emptyRiskStats(), red: emptyRiskStats() } };
-    ui.lastResult.textContent = "Ready";
-    ui.profit.textContent = "0.00 GAMBA";
-    renderUi();
-  });
+  document.querySelectorAll(".risk-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const risk = button.dataset.risk;
+      const active = state.activeRisks.includes(risk);
 
-  document.querySelectorAll(".risk-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const r = btn.dataset.risk;
-      if (state.activeRisks.includes(r) && state.activeRisks.length === 1) return;
-      state.activeRisks = state.activeRisks.includes(r) ? state.activeRisks.filter(x => x !== r) : [...state.activeRisks, r];
-      renderMultipliers();
+      if (active && state.activeRisks.length === 1) return;
+      state.activeRisks = active
+        ? state.activeRisks.filter((item) => item !== risk)
+        : CONFIG.riskOrder.filter((item) => item === risk || state.activeRisks.includes(item));
+      state.ballCount = normalizeBallCount(state.ballCount);
       renderUi();
     });
   });
 
-  document.getElementById("betMinus").addEventListener("click", () => { state.wager = Math.max(1, state.wager - 10); renderUi(); });
-  document.getElementById("betPlus").addEventListener("click", () => { state.wager += 10; renderUi(); });
-  document.getElementById("halfBet").addEventListener("click", () => { state.wager = Math.max(1, Math.floor(state.wager / 2)); renderUi(); });
-  document.getElementById("doubleBet").addEventListener("click", () => { state.wager *= 2; renderUi(); });
-  document.getElementById("maxBet").addEventListener("click", () => { state.wager = Math.floor(state.balance); renderUi(); });
+  ui.dropBtn.addEventListener("click", launchRound);
+  ui.soundBtn.addEventListener("click", () => {
+    state.sound = !state.sound;
+    renderUi();
+  });
+  ui.resetBtn.addEventListener("click", resetDemo);
 
-  document.getElementById("ballMinus").addEventListener("click", () => { ui.ballInput.value = Math.max(1, (parseInt(ui.ballInput.value) || 1) - 1); renderUi(); });
-  document.getElementById("ballPlus").addEventListener("click", () => { ui.ballInput.value = Math.min(CONFIG.maxBalls, (parseInt(ui.ballInput.value) || 1) + 1); renderUi(); });
+  document.getElementById("betMinus").addEventListener("click", () => setWager(state.wager - 1));
+  document.getElementById("betPlus").addEventListener("click", () => setWager(state.wager + 1));
+  document.getElementById("halfBet").addEventListener("click", () => setWager(Math.max(1, Math.floor(state.wager / 2))));
+  document.getElementById("doubleBet").addEventListener("click", () => setWager(Math.min(Math.floor(state.balance), state.wager * 2)));
+  document.getElementById("maxBet").addEventListener("click", () => setWager(Math.max(1, Math.floor(state.balance / state.ballCount))));
 
-  ui.statsBtn.addEventListener("click", () => { renderStats(); ui.statsDialog.showModal(); });
+  document.getElementById("ballMinus").addEventListener("click", () => setBallCount(state.ballCount - 1));
+  document.getElementById("ballPlus").addEventListener("click", () => setBallCount(state.ballCount + 1));
+
+  ui.betInput.addEventListener("change", () => setWager(ui.betInput.value));
+  ui.ballInput.addEventListener("change", () => setBallCount(ui.ballInput.value));
+
+  ui.statsBtn.addEventListener("click", () => {
+    renderStats();
+    ui.statsDialog.showModal();
+  });
   ui.closeStats.addEventListener("click", () => ui.statsDialog.close());
-  window.addEventListener("resize", initCanvasSize);
+
+  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("keydown", (event) => {
+    if (event.target instanceof HTMLInputElement) return;
+    if (event.code === "Space") {
+      event.preventDefault();
+      launchRound();
+    }
+  });
+}
+
+function setWager(value) {
+  state.wager = Math.max(1, Math.floor(Number(value) || 1));
+  renderUi();
+}
+
+function setBallCount(value) {
+  state.ballCount = normalizeBallCount(value);
+  renderUi();
 }
 
 bindEvents();
-initCanvasSize();
+resizeCanvas();
 renderUi();
 requestAnimationFrame(tick);
+
 </script>
   </body>
 </html>
