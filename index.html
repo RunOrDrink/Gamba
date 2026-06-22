@@ -29,7 +29,9 @@
 
 html,
 body {
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -59,7 +61,8 @@ button:disabled {
 
 .app {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   flex-direction: column;
   gap: 14px;
   padding: 14px;
@@ -201,6 +204,7 @@ p {
 .layout {
   display: grid;
   min-height: 0;
+  overflow: hidden;
   flex: 1;
   grid-template-columns: minmax(0, 1fr) 260px;
   gap: 14px;
@@ -297,7 +301,7 @@ p {
   color: #fff;
   font-size: 0.68rem;
   font-weight: 1000;
-  text-shadow: 0 1px 7px rgba(0, 0, 0, 0.65);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.85);
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
@@ -306,12 +310,16 @@ p {
 }
 
 .multiplier-cell.hit {
-  transform: scale(1.12);
-  border-color: #fff;
-  box-shadow: 0 0 28px currentColor;
+  transform: scale(1.07);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.22), 0 0 16px currentColor;
 }
 
 .recent-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
   padding: 14px;
 }
 
@@ -334,9 +342,12 @@ p {
 
 .recent-list {
   display: grid;
-  max-height: calc(100vh - 170px);
+  min-height: 0;
+  flex: 1;
+  align-content: start;
   gap: 9px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-top: 12px;
 }
 
@@ -545,6 +556,18 @@ p {
 }
 
 @media (max-width: 1080px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  .app {
+    height: auto;
+    min-height: 100vh;
+  }
+
   .layout {
     grid-template-columns: 1fr;
   }
@@ -681,15 +704,15 @@ p {
         <div class="risk-card">
           <button class="risk-btn green active" data-risk="green" type="button">
             <span>Green</span>
-            <small>60% RTP</small>
+            <small>Low risk</small>
           </button>
           <button class="risk-btn yellow" data-risk="yellow" type="button">
             <span>Yellow</span>
-            <small>40% RTP</small>
+            <small>Medium risk</small>
           </button>
           <button class="risk-btn red" data-risk="red" type="button">
             <span>Red</span>
-            <small>20% RTP</small>
+            <small>High risk</small>
           </button>
         </div>
 
@@ -721,25 +744,22 @@ const CONFIG = {
       label: "Green",
       color: "#22C55E",
       glow: "rgba(34,197,94,0.45)",
-      rtp: 60,
       multipliers: [16, 2.5, 1.5, 1.1, 0.8, 0.6, 0.4, 0.2, 0.4, 0.6, 0.8, 1.1, 1.5, 2.5, 16],
-      chances: [1, 0.1, 0.25, 0.5, 1, 2, 8.97, 72.35, 8.98, 2, 1, 0.5, 0.25, 0.1, 1]
+      chances: [0.5, 0.35, 0.65, 1.5, 4.5, 8, 16, 37, 16, 8, 4.5, 1.5, 0.65, 0.35, 0.5]
     },
     yellow: {
       label: "Yellow",
       color: "#F59E0B",
       glow: "rgba(245,158,11,0.45)",
-      rtp: 40,
       multipliers: [40, 8, 4, 2.2, 1.2, 0.7, 0.5, 0.2, 0.5, 0.7, 1.2, 2.2, 4, 8, 40],
-      chances: [0.1, 0.05, 0.1, 0.35, 1, 5, 3.5, 79.8, 3.5, 5, 1, 0.35, 0.1, 0.05, 0.1]
+      chances: [0.05, 0.08, 0.2, 0.5, 1.2, 3.5, 8.92, 71.1, 8.92, 3.5, 1.2, 0.5, 0.2, 0.08, 0.05]
     },
     red: {
       label: "Red",
       color: "#EF4444",
       glow: "rgba(239,68,68,0.48)",
-      rtp: 20,
       multipliers: [150, 20, 6, 2, 0.75, 0.2, 0.1, 0, 0.1, 0.2, 0.75, 2, 6, 20, 150],
-      chances: [0.01, 0.02, 0.1, 0.75, 2, 10, 25, 24.24, 25, 10, 2, 0.75, 0.1, 0.02, 0.01]
+      chances: [0.005, 0.02, 0.1, 0.8, 2, 13.75, 24, 18.65, 24, 13.75, 2, 0.8, 0.1, 0.02, 0.005]
     }
   },
   riskOrder: ["green", "yellow", "red"]
@@ -922,36 +942,63 @@ function calculateBoard() {
   state.pegPositions = pegPositions;
 }
 
+function seededRandom(seed) {
+  let value = Math.sin(seed + 1) * 10000;
+  return function random() {
+    value = Math.sin(value + 1.61803398875) * 10000;
+    return value - Math.floor(value);
+  };
+}
+
 function makePath(targetSlot, seed) {
   const m = state.metrics;
+  const random = seededRandom(seed);
   const targetX = m.left + m.slotWidth * (targetSlot + 0.5);
-  const startX = m.centerX + Math.sin(seed * 4.1) * m.pegGap * 0.08;
-  const points = [{ x: startX, y: m.top - m.rowGap * 1.45 }];
+  const points = [
+    {
+      x: m.centerX + (random() - 0.5) * m.pegGap * 0.16,
+      y: m.top - m.rowGap * 1.45
+    }
+  ];
 
-  for (let row = 0; row < CONFIG.rows; row += 1) {
-    const progress = (row + 1) / CONFIG.rows;
-    const eased = Math.pow(progress, 1.15);
-    const baseX = m.centerX + (targetX - m.centerX) * eased;
-    const wave = Math.sin(seed * 2.31 + row * 1.73) * m.pegGap * (0.36 * (1 - progress) + 0.07);
-    const side = Math.sin(seed * 7.7 + row * 2.9) > 0 ? 1 : -1;
-    const y = m.top + row * m.rowGap + m.rowGap * 0.2;
-    let x = baseX + wave + side * m.pegGap * 0.06;
+  let rights = 0;
+  let previousMove = 0;
 
-    const rowPegs = state.pegPositions.filter((peg) => peg.row === row);
-    const nearest = rowPegs.reduce((best, peg) => {
-      if (!best) return peg;
-      return Math.abs(peg.x - x) < Math.abs(best.x - x) ? peg : best;
-    }, null);
+  for (let step = 1; step <= CONFIG.rows; step += 1) {
+    const rowsLeftAfterThis = CONFIG.rows - step;
+    const rightsStillNeeded = targetSlot - rights;
+    let moveRight;
 
-    if (nearest && Math.abs(nearest.x - x) < m.ballRadius + m.pegRadius + 2) {
-      x = nearest.x + Math.sign(x - nearest.x || side) * (m.ballRadius + m.pegRadius + 3);
+    if (rightsStillNeeded <= 0) {
+      moveRight = false;
+    } else if (rightsStillNeeded > rowsLeftAfterThis) {
+      moveRight = true;
+    } else {
+      const pressure = rightsStillNeeded / (rowsLeftAfterThis + 1);
+      const antiStreak = previousMove === 1 ? -0.1 : previousMove === -1 ? 0.1 : 0;
+      moveRight = random() < clamp(pressure + antiStreak, 0.18, 0.82);
     }
 
-    x = clamp(x, m.left + m.slotWidth * 0.45, m.left + m.boardWidth - m.slotWidth * 0.45);
-    points.push({ x, y });
+    rights += moveRight ? 1 : 0;
+    previousMove = moveRight ? 1 : -1;
+
+    const driftIndex = rights - step / 2;
+    const laneX = m.centerX + driftIndex * m.slotWidth;
+    const bounceSide = moveRight ? 1 : -1;
+    const bounceOffset = bounceSide * m.pegGap * (0.11 + random() * 0.08);
+    const jitter = (random() - 0.5) * m.pegGap * 0.08;
+
+    points.push({
+      x: clamp(laneX + bounceOffset + jitter, m.left + m.slotWidth * 0.34, m.left + m.boardWidth - m.slotWidth * 0.34),
+      y: m.top + (step - 1) * m.rowGap + m.rowGap * 0.42
+    });
   }
 
-  points.push({ x: targetX, y: m.slotTop + m.pocketHeight * 0.46 });
+  points.push({
+    x: targetX + (random() - 0.5) * m.slotWidth * 0.08,
+    y: m.slotTop + m.pocketHeight * 0.46
+  });
+
   return preparePath(points);
 }
 
@@ -1083,7 +1130,7 @@ function settleBall(ball) {
       state.pendingRounds.delete(round.id);
       round.profit = Math.round((round.payout - round.stake) * 100) / 100;
       state.recentRounds.unshift(round);
-      state.recentRounds = state.recentRounds.slice(0, 14);
+      state.recentRounds = state.recentRounds.slice(0, 8);
       ui.lastResult.textContent = formatMultiplier(round.bestMultiplier) + " / " + formatMoney(round.payout);
       ui.profit.textContent = (round.profit >= 0 ? "+" : "") + formatMoney(round.profit) + " GAMBA";
     }
@@ -1311,10 +1358,12 @@ function renderMultipliers() {
       const active = state.activeRisks.includes(risk);
       const hit = state.hit && state.hit.risk === risk && state.hit.slot === index;
       cell.className = "multiplier-cell" + (active ? "" : " dim") + (hit ? " hit" : "");
-      cell.style.background = "linear-gradient(180deg, " + config.color + ", rgba(11,15,20,0.72))";
-      cell.style.color = config.color;
-      cell.style.borderColor = hit ? "#ffffff" : config.color + "66";
-      cell.style.boxShadow = hit ? "0 0 26px " + config.glow : "0 0 8px " + config.glow;
+      cell.style.background = hit
+        ? "linear-gradient(180deg, rgba(255,255,255,0.18), " + config.color + " 42%, rgba(11,15,20,0.84))"
+        : "linear-gradient(180deg, " + config.color + ", rgba(11,15,20,0.72))";
+      cell.style.color = "#ffffff";
+      cell.style.borderColor = hit ? "rgba(255,255,255,0.9)" : config.color + "66";
+      cell.style.boxShadow = hit ? "0 0 18px " + config.glow : "0 0 6px " + config.glow;
       cell.textContent = formatMultiplier(multiplier);
       row.appendChild(cell);
     });
@@ -1381,7 +1430,6 @@ function renderStats() {
     ["Total wins", state.stats.wins],
     ["Wagered", formatMoney(state.stats.wagered)],
     ["Paid", formatMoney(state.stats.paid)],
-    ["Live RTP", state.stats.wagered > 0 ? ((state.stats.paid / state.stats.wagered) * 100).toFixed(2) + "%" : "0.00%"],
     ["Biggest win", formatMoney(state.stats.biggestWin)],
     ["Highest multiplier", formatMultiplier(state.stats.highestMultiplier || 0)]
   ];
@@ -1389,7 +1437,6 @@ function renderStats() {
   CONFIG.riskOrder.forEach((risk) => {
     const stats = state.stats.byRisk[risk];
     rows.push([riskConfig(risk).label + " paid", formatMoney(stats.paid)]);
-    rows.push([riskConfig(risk).label + " RTP", stats.wagered > 0 ? ((stats.paid / stats.wagered) * 100).toFixed(2) + "%" : "0.00%"]);
   });
 
   ui.statsGrid.innerHTML = "";
